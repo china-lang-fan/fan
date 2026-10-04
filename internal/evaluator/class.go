@@ -5,20 +5,35 @@ import (
 
 	"fan/internal/ast"
 	"fan/internal/object"
+	"fan/internal/tagsys"
 )
 
 const KindClass object.Kind = "类"
 
 type Class struct {
-	Name    string
-	Fields  []ast.FieldDecl
-	Methods map[string]*Function
-	Embeds  []*Class
-	Parent  *Environment
+	Name         string
+	Fields       []ast.FieldDecl
+	Methods      map[string]*Function
+	Embeds       []*Class
+	Parent       *Environment
+	TagInstances []object.Object
+	Impl         tagsys.Callable
 }
 
 func (c *Class) Kind() object.Kind { return KindClass }
 func (c *Class) Inspect() string   { return fmt.Sprintf("<模型 %s>", c.Name) }
+
+func (c *Class) TargetName() string { return c.Name }
+func (c *Class) TargetKind() tagsys.TargetKind {
+	return tagsys.TargetClass
+}
+func (c *Class) Tags() []tagsys.Object {
+	tags := make([]tagsys.Object, len(c.TagInstances))
+	for i, tag := range c.TagInstances {
+		tags[i] = tag
+	}
+	return tags
+}
 
 type Instance struct {
 	Class  *Class
@@ -48,11 +63,16 @@ func evalClassStmt(stmt *ast.ClassStmt, env *Environment) (object.Object, error)
 		}
 		cls.Embeds = append(cls.Embeds, embedCls)
 	}
+	if err := processClassTags(cls, stmt.Tags, env); err != nil {
+		return nil, err
+	}
 	if existing, ok := env.get(stmt.Name); ok {
 		if existingCls, ok := existing.(*Class); ok {
 			existingCls.Fields = cls.Fields
 			existingCls.Embeds = cls.Embeds
 			existingCls.Parent = env
+			existingCls.TagInstances = append(existingCls.TagInstances, cls.TagInstances...)
+			existingCls.Impl = cls.Impl
 			return existingCls, nil
 		}
 	}
@@ -71,17 +91,40 @@ func evalMethodDef(stmt *ast.MethodDef, env *Environment) (object.Object, error)
 	if !ok {
 		return nil, &EvalError{Pos: stmt.Position, Reason: fmt.Sprintf("%s 不是模型", stmt.ClassName)}
 	}
-	cls.Methods[stmt.MethodName] = &Function{
+	fn := &Function{
 		Params:      append([]ast.Parameter(nil), stmt.Function.Params...),
 		Body:        stmt.Function.Body,
 		Env:         env,
 		Name:        stmt.MethodName,
 		ReturnTypes: stmt.Function.ReturnTypes,
+		Owner:       cls,
 	}
+	if err := processFunctionTags(fn, stmt.Function.Tags, env); err != nil {
+		return nil, err
+	}
+	cls.Methods[stmt.MethodName] = fn
 	return object.Null, nil
 }
 
 func (c *Class) instantiate(pos ast.Position, args []object.Object) (*Instance, error) {
+	if c.Impl != nil {
+		callArgs := make([]tagsys.Object, len(args))
+		for i, arg := range args {
+			callArgs[i] = arg
+		}
+		results, err := c.Impl.Call(callArgs)
+		if err != nil {
+			return nil, err
+		}
+		if len(results) != 1 {
+			return nil, fmt.Errorf("模型 %s 的自定义实现必须返回一个实例", c.Name)
+		}
+		inst, ok := results[0].(*Instance)
+		if !ok {
+			return nil, fmt.Errorf("模型 %s 的自定义实现必须返回实例", c.Name)
+		}
+		return inst, nil
+	}
 	inst := &Instance{
 		Class:  c,
 		Fields: map[string]object.Object{},
@@ -152,11 +195,16 @@ func (i *Instance) getMethod(name string) (*Function, error) {
 
 func (f *Function) bind(inst *Instance) *Function {
 	bound := &Function{
-		Params:      append([]ast.Parameter(nil), f.Params...),
-		Body:        f.Body,
-		Env:         NewEnclosedEnvironment(f.Env),
-		Name:        f.Name,
-		ReturnTypes: f.ReturnTypes,
+		Params:       append([]ast.Parameter(nil), f.Params...),
+		Body:         f.Body,
+		Env:          NewEnclosedEnvironment(f.Env),
+		Name:         f.Name,
+		ReturnTypes:  f.ReturnTypes,
+		TagInstances: append([]object.Object(nil), f.TagInstances...),
+		Impl:         f.Impl,
+		MethodImpl:   f.MethodImpl,
+		Owner:        f.Owner,
+		Self:         inst,
 	}
 	_ = bound.Env.declare("自己", inst, false, ast.TypeAny)
 	return bound
@@ -188,6 +236,15 @@ func evalFieldAccess(node *ast.MemberExpr, env *Environment, obj object.Object) 
 			return &object.String{Value: target.Message}, nil
 		}
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("错误 没有成员 %s", node.Name)}
+	case *runtimeTagContext:
+		return target.member(node.Name)
+	case *Function:
+		switch node.Name {
+		case "标签":
+			out := make([]object.Object, len(target.TagInstances))
+			copy(out, target.TagInstances)
+			return &object.Array{Elements: out}, nil
+		}
 	}
 	return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有成员 %s", obj.Kind(), node.Name)}
 }

@@ -646,8 +646,9 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("模块 %s 没有导出 %s", target.Name, member.Name)}
 		}
 		return callExported(callee, args, node.Position)
+	default:
+		return callDynamicMember(obj, member, args, node.Position)
 	}
-	return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有方法 %s", obj.Kind(), member.Name)}
 }
 
 func callExported(callee object.Object, args []object.Object, pos ast.Position) (object.Object, error) {

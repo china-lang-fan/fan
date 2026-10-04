@@ -8,6 +8,7 @@ import (
 
 	"fan/internal/ast"
 	"fan/internal/object"
+	"fan/internal/tagsys"
 )
 
 var Stdout io.Writer = os.Stdout
@@ -15,10 +16,11 @@ var Stdout io.Writer = os.Stdout
 type builtinFn func(pos ast.Position, args []object.Object) (object.Object, error)
 
 var builtins = map[string]builtinFn{
-	"长度": builtinLength,
-	"追加": builtinAppend,
-	"打印": builtinPrint,
-	"错误": builtinError,
+	"长度":     builtinLength,
+	"追加":     builtinAppend,
+	"打印":     builtinPrint,
+	"错误":     builtinError,
+	"注册标签处理": builtinRegisterTagHandler,
 }
 
 func IsBuiltin(name string) bool {
@@ -55,12 +57,16 @@ func builtinAppend(pos ast.Position, args []object.Object) (object.Object, error
 	return &object.Array{Elements: elems}, nil
 }
 
-func builtinPrint(pos ast.Position, args []object.Object) (object.Object, error) {
+func printObjects(args []object.Object) {
 	parts := make([]string, 0, len(args))
 	for _, a := range args {
 		parts = append(parts, object.Format(a))
 	}
 	fmt.Fprintln(Stdout, strings.Join(parts, " "))
+}
+
+func builtinPrint(pos ast.Position, args []object.Object) (object.Object, error) {
+	printObjects(args)
 	return object.Null, nil
 }
 
@@ -70,6 +76,22 @@ func builtinError(pos ast.Position, args []object.Object) (object.Object, error)
 	}
 	msg := object.Format(args[0])
 	return object.NewError(msg), nil
+}
+
+func builtinRegisterTagHandler(pos ast.Position, args []object.Object) (object.Object, error) {
+	if len(args) != 2 {
+		return nil, &EvalError{Pos: pos, Reason: "注册标签处理 需要 2 个参数"}
+	}
+	name, ok := args[0].(*object.String)
+	if !ok {
+		return nil, &EvalError{Pos: pos, Reason: "标签名必须是字符串"}
+	}
+	fn, ok := args[1].(*Function)
+	if !ok {
+		return nil, &EvalError{Pos: pos, Reason: "标签处理器必须是函数"}
+	}
+	registerFanTagHandler(name.Value, fn)
+	return object.Null, nil
 }
 
 func spreadTuples(args []object.Object) []object.Object {
@@ -123,6 +145,8 @@ func evalCallExpr(node *ast.CallExpr, env *Environment) (object.Object, error) {
 		return applyFunction(callable, args, node.Position)
 	case *Class:
 		return callable.instantiate(node.Position, args)
+	case tagsys.Callable:
+		return callTagsysCallable(callable, args, node.Position)
 	}
 	return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 不是函数或类", ident.Name)}
 }

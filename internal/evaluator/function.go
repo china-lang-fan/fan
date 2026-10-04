@@ -5,16 +5,22 @@ import (
 
 	"fan/internal/ast"
 	"fan/internal/object"
+	"fan/internal/tagsys"
 )
 
 const KindFunction object.Kind = "函数"
 
 type Function struct {
-	Params      []ast.Parameter
-	Body        *ast.BlockStmt
-	Env         *Environment
-	Name        string
-	ReturnTypes []ast.DeclType
+	Params       []ast.Parameter
+	Body         *ast.BlockStmt
+	Env          *Environment
+	Name         string
+	ReturnTypes  []ast.DeclType
+	TagInstances []object.Object
+	Impl         tagsys.Callable
+	MethodImpl   tagsys.Callable
+	Owner        *Class
+	Self         *Instance
 }
 
 func (f *Function) Kind() object.Kind { return KindFunction }
@@ -23,6 +29,21 @@ func (f *Function) Inspect() string {
 		return fmt.Sprintf("<函数 %s>", f.Name)
 	}
 	return "<函数>"
+}
+
+func (f *Function) TargetName() string { return f.Name }
+func (f *Function) TargetKind() tagsys.TargetKind {
+	if f.Owner != nil {
+		return tagsys.TargetMethod
+	}
+	return tagsys.TargetFunction
+}
+func (f *Function) Tags() []tagsys.Object {
+	tags := make([]tagsys.Object, len(f.TagInstances))
+	for i, tag := range f.TagInstances {
+		tags[i] = tag
+	}
+	return tags
 }
 
 type returnSignal struct {
@@ -34,13 +55,17 @@ func (r *returnSignal) Error() string {
 }
 
 func evalFunctionLiteral(node *ast.FunctionLiteral, env *Environment) (object.Object, error) {
-	return &Function{
+	fn := &Function{
 		Params:      node.Params,
 		Body:        node.Body,
 		Env:         env,
 		Name:        node.Name,
 		ReturnTypes: node.ReturnTypes,
-	}, nil
+	}
+	if err := processFunctionTags(fn, node.Tags, env); err != nil {
+		return nil, err
+	}
+	return fn, nil
 }
 
 func evalMemberExpression(node *ast.MemberExpr, env *Environment) (object.Object, error) {
@@ -96,37 +121,97 @@ func bindArguments(fn *Function, args []object.Object, pos ast.Position) ([]obje
 	return values, nil
 }
 
-func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object.Object, error) {
-	boundValues, err := bindArguments(fn, args, pos)
+func (f *Function) Call(args []tagsys.Object) ([]tagsys.Object, error) {
+	callArgs := make([]object.Object, len(args))
+	for i, arg := range args {
+		value, ok := arg.(object.Object)
+		if !ok || arg == nil {
+			value = object.Null
+		}
+		callArgs[i] = value
+	}
+	result, err := applyFunction(f, callArgs, ast.Position{})
 	if err != nil {
 		return nil, err
+	}
+	switch values := result.(type) {
+	case *object.Tuple:
+		out := make([]tagsys.Object, len(values.Values))
+		for i, value := range values.Values {
+			out[i] = value
+		}
+		return out, nil
+	default:
+		return []tagsys.Object{result}, nil
+	}
+}
+
+func callImpl(impl tagsys.Callable, args []tagsys.Object, pos ast.Position, returnTypes []ast.DeclType) (object.Object, error) {
+	results, err := impl.Call(args)
+	if err != nil {
+		return nil, err
+	}
+	returnValues := make([]object.Object, len(results))
+	for i, result := range results {
+		value, ok := result.(object.Object)
+		if !ok || result == nil {
+			value = object.Null
+		}
+		returnValues[i] = value
+	}
+	return coerceReturnValues(pos, returnTypes, returnValues)
+}
+
+func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object.Object, error) {
+	values, err := bindArguments(fn, args, pos)
+	if err != nil {
+		return nil, err
+	}
+	if fn.Impl != nil {
+		callArgs := make([]tagsys.Object, len(values))
+		for i, value := range values {
+			callArgs[i] = value
+		}
+		return callImpl(fn.Impl, callArgs, pos, fn.ReturnTypes)
+	}
+	if fn.MethodImpl != nil {
+		callArgs := make([]tagsys.Object, 0, len(values)+1)
+		self := object.Object(object.Null)
+		if fn.Self != nil {
+			self = fn.Self
+		}
+		callArgs = append(callArgs, self)
+		for _, value := range values {
+			callArgs = append(callArgs, value)
+		}
+		return callImpl(fn.MethodImpl, callArgs, pos, fn.ReturnTypes)
 	}
 	env := NewEnclosedEnvironment(fn.Env)
 	for i, param := range fn.Params {
 		if param.Variadic {
-			if err := env.declare(param.Name, boundValues[i], false, ast.TypeArray); err != nil {
+			if err := env.declare(param.Name, values[i], false, ast.TypeArray); err != nil {
 				return nil, &EvalError{Pos: pos, Reason: err.Error()}
 			}
 			continue
 		}
-		if err := checkDeclType(param.Type, boundValues[i]); err != nil {
+		if err := checkDeclType(param.Type, values[i]); err != nil {
 			return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("参数 %s 类型不匹配：%s", param.Name, err.Error())}
 		}
-		if err := env.declare(param.Name, boundValues[i], false, param.Type); err != nil {
+		if err := env.declare(param.Name, values[i], false, param.Type); err != nil {
 			return nil, &EvalError{Pos: pos, Reason: err.Error()}
 		}
 	}
 	result, err := evalBlock(fn.Body, env)
-	var values []object.Object
+	var resultValues []object.Object
 	if err != nil {
 		if sig, ok := err.(*returnSignal); ok {
-			values = sig.values
+			resultValues = sig.values
 		} else if cs, ok := err.(*checkSignal); ok {
-			values, err = fn.checkReturn(cs.err)
+			resultValues, err = fn.checkReturn(cs.err)
 			if err != nil {
 				return nil, err
 			}
-			return coerceReturnValues(pos, fn.ReturnTypes, values)
+			return coerceReturnValues(pos, fn.ReturnTypes, resultValues)
 		} else {
 			return nil, err
 		}
@@ -134,9 +219,9 @@ func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object
 		if result == nil {
 			result = object.Null
 		}
-		values = []object.Object{result}
+		resultValues = []object.Object{result}
 	}
-	return coerceReturnValues(pos, fn.ReturnTypes, values)
+	return coerceReturnValues(pos, fn.ReturnTypes, resultValues)
 }
 
 func (f *Function) checkReturn(cause *object.Error) ([]object.Object, error) {

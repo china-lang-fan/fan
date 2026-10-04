@@ -15,6 +15,7 @@ type ClassStmt struct {
 	Name     string
 	Fields   []FieldDecl
 	Embeds   []string
+	Tags     []*TagExpr
 }
 
 type MethodDef struct {

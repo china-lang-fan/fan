@@ -148,6 +148,8 @@ func (p *Parser) skipStatementEnd() {
 
 func (p *Parser) parseStatement() ast.Statement {
 	switch {
+	case p.cur.Type == token.TAG:
+		return p.parseTaggedStatement()
 	case p.cur.Type == token.SWITCH:
 		return p.parseSwitchStatement()
 	case p.cur.Type == token.IF:
@@ -641,10 +643,13 @@ func (p *Parser) parseExpression(prec precedence) ast.Expression {
 			p.cur.Type == token.THEN || p.cur.Type == token.ELSE || p.cur.Type == token.ELSEIF ||
 			p.cur.Type == token.LOOP || p.cur.Type == token.TIMES || p.cur.Type == token.UNTIL ||
 			p.cur.Type == token.INOF || p.cur.Type == token.COLON {
-			if p.implicitCallOK && (p.cur.Type == token.NEWLINE || p.cur.Type == token.EOF) {
+			if p.implicitCallOK && isImplicitCallEnd(p.cur.Type) {
+				allowIdentifier := p.cur.Type == token.NEWLINE || p.cur.Type == token.EOF
 				switch expr := left.(type) {
 				case *ast.Identifier:
-					return &ast.MaybeCallExpr{Position: left.Pos(), Callee: expr, AutoCall: true}
+					if allowIdentifier {
+						return &ast.MaybeCallExpr{Position: left.Pos(), Callee: expr, AutoCall: true}
+					}
 				case *ast.MemberExpr:
 					return &ast.MaybeCallExpr{Position: left.Pos(), Callee: expr, AutoCall: true}
 				}
@@ -673,6 +678,14 @@ func (p *Parser) parseExpression(prec precedence) ast.Expression {
 			return nil
 		}
 	}
+}
+
+func isImplicitCallEnd(t token.Type) bool {
+	switch t {
+	case token.NEWLINE, token.EOF, token.COMMA, token.RPAREN, token.RBRACK, token.THEN, token.ELSE, token.ELSEIF:
+		return true
+	}
+	return false
 }
 
 func (p *Parser) parseImplicitCall(head ast.Expression) ast.Expression {
@@ -1366,6 +1379,86 @@ func (p *Parser) parseMember(left ast.Expression) ast.Expression {
 	return p.parsePostfix(node)
 }
 
+func (p *Parser) parseTaggedStatement() ast.Statement {
+	var tags []*ast.TagExpr
+	for p.cur.Type == token.TAG {
+		tag := p.parseTagExpr()
+		if tag != nil {
+			tags = append(tags, tag)
+		}
+		for p.cur.Type == token.NEWLINE {
+			p.next()
+		}
+	}
+	stmt := p.parseStatement()
+	switch target := stmt.(type) {
+	case *ast.VarDecl:
+		literal, ok := target.Value.(*ast.FunctionLiteral)
+		if !ok {
+			pos := astPos(tags)
+			p.addError(token.Token{Line: pos.Line, Column: pos.Column}, "标签只能用于模型、函数或方法")
+			break
+		}
+		literal.Tags = append(literal.Tags, tags...)
+	case *ast.MethodDef:
+		target.Function.Tags = append(target.Function.Tags, tags...)
+	case *ast.ClassStmt:
+		target.Tags = append(target.Tags, tags...)
+	default:
+		pos := astPos(tags)
+		p.addError(token.Token{Line: pos.Line, Column: pos.Column}, "标签只能用于模型、函数或方法")
+	}
+	return stmt
+}
+
+func astPos(tags []*ast.TagExpr) ast.Position {
+	if len(tags) > 0 {
+		return tags[0].Position
+	}
+	return ast.Position{}
+}
+
+func (p *Parser) parseTagExpr() *ast.TagExpr {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	p.next()
+	if p.cur.Type != token.IDENT {
+		p.addError(p.cur, "标签后应为标签名称")
+		return nil
+	}
+	tag := &ast.TagExpr{Position: pos, TypeName: p.cur.Literal}
+	p.next()
+	if p.cur.Type != token.LPAREN {
+		return tag
+	}
+	p.parenDepth++
+	p.next()
+	for p.cur.Type != token.RPAREN && p.cur.Type != token.EOF {
+		if (p.cur.Type == token.IDENT || p.cur.Type == token.METHOD) && p.peek.Type == token.ASSIGN {
+			name := p.cur.Literal
+			p.next()
+			p.next()
+			value := p.parseExpression(LOWEST)
+			tag.Named = append(tag.Named, ast.NamedTagArg{Name: name, Value: value})
+		} else {
+			value := p.parseExpression(LOWEST)
+			tag.Positional = append(tag.Positional, value)
+		}
+		if p.cur.Type == token.COMMA {
+			p.next()
+			continue
+		}
+		break
+	}
+	if p.cur.Type != token.RPAREN {
+		p.addError(p.cur, "标签参数缺少右括号")
+		p.parenDepth--
+		return tag
+	}
+	p.parenDepth--
+	p.next()
+	return tag
+}
+
 func (p *Parser) parseFunctionStatement() ast.Statement {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
 	p.next()
@@ -1397,6 +1490,7 @@ func (p *Parser) parseFunctionStatement() ast.Statement {
 			Body:        body,
 			Name:        name,
 			ReturnTypes: retTypes,
+			Tags:        nil,
 		},
 	}
 }

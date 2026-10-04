@@ -18,6 +18,7 @@ type FunctionLiteral struct {
 	Body        *BlockStmt
 	Name        string
 	ReturnTypes []DeclType
+	Tags        []*TagExpr
 }
 
 func (n *FunctionLiteral) Pos() Position   { return n.Position }

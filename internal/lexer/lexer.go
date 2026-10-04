@@ -77,6 +77,8 @@ func (l *Lexer) NextToken() token.Token {
 		return l.emitAndAdvance(token.COMMA, ",")
 	case '，':
 		return l.emitAndAdvance(token.COMMA, "，")
+	case '@', '＠':
+		return l.emitAndAdvance(token.TAG, string(r))
 	case '？', '?':
 		return l.emitAndAdvance(token.QUEST, string(r))
 	case '.':
