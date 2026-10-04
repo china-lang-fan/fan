@@ -34,7 +34,7 @@ func TestBuiltinTagPrintArray(t *testing.T) {
 	if _, err := runSource(t, src); err != nil {
 		t.Fatalf("运行错误：%v", err)
 	}
-	if buf.String() != "[1, 2, 3]\n" {
+	if buf.String() != "1 2 3\n" {
 		t.Fatalf("打印输出不符：%q", buf.String())
 	}
 }

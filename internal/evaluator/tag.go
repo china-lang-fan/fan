@@ -61,6 +61,29 @@ func (c *classCallable) Call(args []tagsys.Object) ([]tagsys.Object, error) {
 	return []tagsys.Object{inst}, nil
 }
 
+type variadicUnwrapCallable struct {
+	callable tagsys.Callable
+}
+
+func (c *variadicUnwrapCallable) Kind() object.Kind { return "函数" }
+func (c *variadicUnwrapCallable) Inspect() string {
+	return "<函数 可变参数>"
+}
+
+func (c *variadicUnwrapCallable) Call(args []tagsys.Object) ([]tagsys.Object, error) {
+	callArgs := make([]tagsys.Object, len(args))
+	copy(callArgs, args)
+	if len(callArgs) > 0 {
+		if elements, ok := callArgs[len(callArgs)-1].(*object.Array); ok {
+			callArgs = callArgs[:len(callArgs)-1]
+			for _, value := range elements.Elements {
+				callArgs = append(callArgs, value)
+			}
+		}
+	}
+	return c.callable.Call(callArgs)
+}
+
 type methodWithoutReceiverCallable struct {
 	callable tagsys.Callable
 }
@@ -267,6 +290,9 @@ func builtinTagHandler(ctx tagsys.Context) error {
 	fn, ok := nativeFunctions[name.Value]
 	if !ok {
 		return fmt.Errorf("内建函数未注册：%s", name.Value)
+	}
+	if targetIsVariadic(ctx.Target()) {
+		fn = &variadicUnwrapCallable{callable: fn}
 	}
 	if ctx.Target().TargetKind() == tagsys.TargetMethod {
 		ctx.ReplaceMethod(&methodWithoutReceiverCallable{callable: fn})

@@ -1402,6 +1402,12 @@ func (p *Parser) parseTaggedStatement() ast.Statement {
 		literal.Tags = append(literal.Tags, tags...)
 	case *ast.MethodDef:
 		target.Function.Tags = append(target.Function.Tags, tags...)
+	case *ast.ExportStmt:
+		if decl, ok := target.Inner.(*ast.VarDecl); ok {
+			if literal, ok := decl.Value.(*ast.FunctionLiteral); ok {
+				literal.Tags = append(literal.Tags, tags...)
+			}
+		}
 	case *ast.ClassStmt:
 		target.Tags = append(target.Tags, tags...)
 	default:

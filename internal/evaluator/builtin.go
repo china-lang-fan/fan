@@ -21,6 +21,12 @@ var builtins = map[string]builtinFn{
 	"打印":     builtinPrint,
 	"错误":     builtinError,
 	"注册标签处理": builtinRegisterTagHandler,
+	"print":  builtinPrint,
+	"error":  builtinError,
+	"type":   builtinType,
+	"trunc":  builtinTrunc,
+	"ord":    builtinOrd,
+	"char":   builtinChar,
 }
 
 func IsBuiltin(name string) bool {

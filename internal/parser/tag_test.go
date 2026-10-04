@@ -89,6 +89,22 @@ func TestParseBareIdentifierArgumentStaysFunction(t *testing.T) {
 	}
 }
 
+func TestParseTaggedExport(t *testing.T) {
+	src := `@内建("type")
+导出 函数 type(值) -> 字符串
+结束`
+	prog, errs := ParseProgram(src)
+	if len(errs) > 0 {
+		t.Fatalf("解析错误：%v", errs)
+	}
+	exportStmt := prog.Statements[0].(*ast.ExportStmt)
+	decl := exportStmt.Inner.(*ast.VarDecl)
+	fn := decl.Value.(*ast.FunctionLiteral)
+	if len(fn.Tags) != 1 {
+		t.Fatalf("应解析 1 个标签，实际 %d", len(fn.Tags))
+	}
+}
+
 func TestParseInvalidTagTarget(t *testing.T) {
 	src := `@标记
 变量 x = 1`
