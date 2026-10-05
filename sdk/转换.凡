@@ -1,0 +1,119 @@
+导入 "系统" 作为 系统
+
+@内建("intToString")
+函数 intText(值)
+    返回 ""
+结束
+
+@内建("floatToString")
+函数 floatText(值)
+    返回 ""
+结束
+
+@内建("parseInt")
+函数 parseInteger(值)
+    返回 空, 空
+结束
+
+@内建("parseFloat")
+函数 parseDecimal(值)
+    返回 空, 空
+结束
+
+@内建("parseBool")
+函数 parseBooleanValue(值)
+    返回 假, 空
+结束
+
+导出 函数 toString(值)
+    判断 系统.type(值)
+        为 "string"
+            返回 值
+        为 "integer"
+            返回 intText(值)
+        为 "float"
+            返回 floatText(值)
+        为 "boolean"
+            如果 值 那么
+                返回 "真"
+            结束
+            返回 "假"
+        为 "nil"
+            返回 "空"
+        为 "error"
+            返回 值.消息
+    结束
+    返回 系统.type(值)
+结束
+
+导出 函数 toInt(值)
+    判断 系统.type(值)
+        为 "integer"
+            返回 值
+        为 "float"
+            返回 系统.trunc(值)
+        为 "boolean"
+            如果 值 那么
+                返回 1
+            结束
+            返回 0
+        为 "string"
+            变量 结果, 错误值 = parseInteger(值)
+            返回 结果
+    结束
+    系统.fail("无法转换为整数：" + 系统.type(值))
+    返回 0
+结束
+
+导出 函数 toFloat(值)
+    判断 系统.type(值)
+        为 "integer"
+            返回 值 + 0.0
+        为 "float"
+            返回 值
+        为 "boolean"
+            如果 值 那么
+                返回 1.0
+            结束
+            返回 0.0
+        为 "string"
+            变量 结果, 错误值 = parseDecimal(值)
+            返回 结果
+    结束
+    系统.fail("无法转换为小数：" + 系统.type(值))
+    返回 0.0
+结束
+
+导出 函数 toBool(值)
+    判断 系统.type(值)
+        为 "boolean"
+            返回 值
+        为 "integer"
+            返回 值 != 0
+        为 "float"
+            返回 值 != 0.0
+        为 "string"
+            变量 结果, 错误值 = parseBooleanValue(值)
+            如果 错误值 == 空 那么
+                返回 结果
+            结束
+            返回 值 != ""
+        为 "nil"
+            返回 假
+        为 "array", "dict"
+            返回 系统.len(值) > 0
+    结束
+    返回 真
+结束
+
+导出 函数 parseStringAsInt(文本 字符串)
+    返回 parseInteger(文本)
+结束
+
+导出 函数 parseStringAsFloat(文本 字符串)
+    返回 parseDecimal(文本)
+结束
+
+导出 函数 parseStringAsBool(文本 字符串)
+    返回 parseBooleanValue(文本)
+结束
