@@ -28,6 +28,7 @@ func init() {
 	RegisterNativeFunction("error", nativeFromBuiltin(builtinError))
 	RegisterNativeFunction("len", nativeFromBuiltin(builtinLength))
 	RegisterNativeFunction("append", nativeFromBuiltin(builtinAppend))
+	RegisterNativeFunction("fail", nativeFromBuiltin(builtinFail))
 }
 
 func targetIsVariadic(target tagsys.Target) bool {

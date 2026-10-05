@@ -80,6 +80,10 @@ func (e *Environment) assign(name string, val object.Object) error {
 	return nil
 }
 
+func (e *Environment) Get(name string) (object.Object, bool) {
+	return e.get(name)
+}
+
 func (e *Environment) get(name string) (object.Object, bool) {
 	b, ok := e.find(name)
 	if !ok {

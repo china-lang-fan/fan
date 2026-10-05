@@ -240,6 +240,8 @@ func init() {
 	RegisterBuiltinClass("内建", []ast.FieldDecl{
 		{Name: "值", Type: ast.TypeString},
 	})
+	RegisterBuiltinClass("测试", nil)
+	RegisterBuiltinClass("test", nil)
 	RegisterTagHandler("内建", tagsys.HandlerFunc(builtinTagHandler))
 	RegisterNativeFunction("print", nativePrint)
 	RegisterNativeFunction("打印", nativePrint)

@@ -27,6 +27,7 @@ var builtins = map[string]builtinFn{
 	"trunc":  builtinTrunc,
 	"ord":    builtinOrd,
 	"char":   builtinChar,
+	"fail":   builtinFail,
 }
 
 func IsBuiltin(name string) bool {
@@ -82,6 +83,13 @@ func builtinError(pos ast.Position, args []object.Object) (object.Object, error)
 	}
 	msg := object.Format(args[0])
 	return object.NewError(msg), nil
+}
+
+func builtinFail(pos ast.Position, args []object.Object) (object.Object, error) {
+	if len(args) == 0 {
+		return nil, &EvalError{Pos: pos, Reason: "断言失败"}
+	}
+	return nil, &EvalError{Pos: pos, Reason: object.Format(args[0])}
 }
 
 func builtinRegisterTagHandler(pos ast.Position, args []object.Object) (object.Object, error) {

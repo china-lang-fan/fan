@@ -11,6 +11,7 @@ import (
 	"fan/internal/evaluator"
 	"fan/internal/object"
 	"fan/internal/parser"
+	"fan/internal/testrun"
 )
 
 var version = "dev"
@@ -36,6 +37,19 @@ func run(args []string) error {
 			return fmt.Errorf("用法：fan run <脚本.fan>")
 		}
 		return runFile(args[1])
+	case "test":
+		target := "."
+		if len(args) >= 2 {
+			target = args[1]
+		}
+		results, err := testrun.Runner{Out: os.Stdout}.Run(target)
+		if err != nil {
+			return err
+		}
+		if testrun.HasFailure(results) {
+			return fmt.Errorf("测试失败")
+		}
+		return nil
 	case "repl":
 		return runREPL(os.Stdin, os.Stdout)
 	case "help", "-h", "--help":
@@ -115,6 +129,7 @@ func printUsage() {
 	fmt.Println("凡语言 —— 中文通用脚本语言（命令名：fan）")
 	fmt.Println("用法：")
 	fmt.Println("  fan run <脚本.fan>   运行脚本")
+	fmt.Println("  fan test [路径]      运行测试")
 	fmt.Println("  fan repl             进入交互模式")
 	fmt.Println("  fan version          显示版本")
 	fmt.Println("  fan help             显示帮助")
