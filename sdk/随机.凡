@@ -1,0 +1,78 @@
+导入 "系统" 作为 系统
+导入 "数组" 作为 数组模块
+
+@内建("randomInt")
+函数 randomIntValue(最大值)
+    返回 0
+结束
+
+@内建("randomFloat")
+函数 randomFloatValue()
+    返回 0.0
+结束
+
+导出 函数 int(最大值 整数) -> 整数
+    如果 最大值 <= 0 那么
+        系统.fail("int 的最大值必须为正数")
+    结束
+    返回 randomIntValue(最大值)
+结束
+
+导出 函数 intRange(最小值 整数, 最大值 整数) -> 整数
+    如果 最大值 <= 最小值 那么
+        系统.fail("intRange 的最大值必须大于最小值")
+    结束
+    返回 最小值 + randomIntValue(最大值 - 最小值)
+结束
+
+导出 函数 float()
+    返回 randomFloatValue()
+结束
+
+导出 函数 floatRange(最小值, 最大值)
+    返回 最小值 + randomFloatValue() * (最大值 - 最小值)
+结束
+
+导出 函数 bool() -> 布尔
+    返回 randomFloatValue() < 0.5
+结束
+
+导出 函数 chance(概率) -> 布尔
+    返回 randomFloatValue() < 概率
+结束
+
+导出 函数 choice(列表 数组)
+    变量 长度值 = 系统.len(列表)
+    如果 长度值 == 0 那么
+        系统.fail("choice 数组不能为空")
+    结束
+    返回 列表[randomIntValue(长度值)]
+结束
+
+导出 函数 shuffle(列表 数组) -> 数组
+    变量 结果 = 数组模块.slice(列表, 0)
+    变量 位置 = 系统.len(结果) - 1
+    当 位置 > 0 循环
+        变量 随机位置 = randomIntValue(位置 + 1)
+        变量 临时 = 结果[位置]
+        结果[位置] = 结果[随机位置]
+        结果[随机位置] = 临时
+        位置--
+    结束
+    返回 结果
+结束
+
+导出 函数 sample(列表 数组, 数量 整数) -> 数组
+    变量 长度值 = 系统.len(列表)
+    如果 数量 < 0 那么
+        系统.fail("sample 数量不能为负数")
+    结束
+    如果 数量 > 长度值 那么
+        系统.fail("sample 数量不能超过数组长度")
+    结束
+    返回 数组模块.slice(shuffle(列表), 0, 数量)
+结束
+
+导出 函数 oneOf(列表 数组)
+    返回 choice(列表)
+结束
