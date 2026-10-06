@@ -54,9 +54,9 @@ func TestStringModuleSplitAndJoin(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`文本模块.split("a,b,c", ",")`, "[a, b, c]"},
-		{`文本模块.split("abc", "")`, "[a, b, c]"},
-		{`文本模块.join(["a", "b", "c"], "-")`, "a-b-c"},
+		{`文本模块.拆分("a,b,c", ",")`, "[a, b, c]"},
+		{`文本模块.拆分("abc", "")`, "[a, b, c]"},
+		{`文本模块.连接(["a", "b", "c"], "-")`, "a-b-c"},
 	}
 	for _, tc := range cases {
 		if got := evalStringModule(t, tc.src).Inspect(); got != tc.want {
@@ -70,14 +70,14 @@ func TestStringModuleSearch(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`文本模块.contains("abc", "b")`, "真"},
-		{`文本模块.contains("abc", "d")`, "假"},
-		{`文本模块.startsWith("abc", "a")`, "真"},
-		{`文本模块.endsWith("abc", "c")`, "真"},
-		{`文本模块.index("abc", "b")`, "1"},
-		{`文本模块.index("abc", "d")`, "-1"},
-		{`文本模块.substring("abc", 1, 2)`, "b"},
-		{`文本模块.substring("abc", 1)`, "bc"},
+		{`文本模块.包含("abc", "b")`, "真"},
+		{`文本模块.包含("abc", "d")`, "假"},
+		{`文本模块.开头是("abc", "a")`, "真"},
+		{`文本模块.结尾是("abc", "c")`, "真"},
+		{`文本模块.位置("abc", "b")`, "1"},
+		{`文本模块.位置("abc", "d")`, "-1"},
+		{`文本模块.截取("abc", 1, 2)`, "b"},
+		{`文本模块.截取("abc", 1)`, "bc"},
 	}
 	for _, tc := range cases {
 		if got := evalStringModule(t, tc.src).Inspect(); got != tc.want {
@@ -91,10 +91,10 @@ func TestStringModuleTransform(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`文本模块.replace("abc", "b", "x")`, "axc"},
-		{`文本模块.trim("  abc  ")`, "abc"},
-		{`文本模块.lower("AbC")`, "abc"},
-		{`文本模块.upper("AbC")`, "ABC"},
+		{`文本模块.替换("abc", "b", "x")`, "axc"},
+		{`文本模块.修剪("  abc  ")`, "abc"},
+		{`文本模块.转小写("AbC")`, "abc"},
+		{`文本模块.转大写("AbC")`, "ABC"},
 	}
 	for _, tc := range cases {
 		if got := evalStringModule(t, tc.src).Inspect(); got != tc.want {

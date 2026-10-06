@@ -21,9 +21,9 @@ func TestRunPassesScriptArgs(t *testing.T) {
 	source := `导入 "进程" 作为 进程模块
 导入 "系统" 作为 系统
 
-变量 参数列表 = 进程模块.args()
-系统.print(参数列表[0])
-系统.print(进程模块.script())
+变量 参数列表 = 进程模块.参数()
+系统.打印(参数列表[0])
+系统.打印(进程模块.脚本())
 `
 	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
 		t.Fatalf("写入脚本失败：%v", err)

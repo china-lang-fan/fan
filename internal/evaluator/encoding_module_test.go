@@ -45,8 +45,8 @@ func evalEncodingModule(t *testing.T, src string) object.Object {
 }
 
 func TestEncodingModuleJSON(t *testing.T) {
-	src := `变量 文本, 编码错误 = 编码模块.jsonString({"a": 1})
-变量 值, 解码错误 = 编码模块.parseJSON(文本)
+	src := `变量 文本, 编码错误 = 编码模块.生成JSON({"a": 1})
+变量 值, 解码错误 = 编码模块.解析JSON(文本)
 值["a"]`
 	if got := evalEncodingModule(t, src).Inspect(); got != "1" {
 		t.Fatalf("结果为 %s，期望 1", got)
@@ -54,7 +54,7 @@ func TestEncodingModuleJSON(t *testing.T) {
 }
 
 func TestEncodingModuleBase64(t *testing.T) {
-	src := `变量 解码, 错误值 = 编码模块.parseBase64(编码模块.base64String("fan"))
+	src := `变量 解码, 错误值 = 编码模块.解析Base64(编码模块.生成Base64("fan"))
 解码`
 	if got := evalEncodingModule(t, src).Inspect(); got != "fan" {
 		t.Fatalf("结果为 %s，期望 fan", got)

@@ -45,14 +45,14 @@ func evalConversionModule(t *testing.T, src string) object.Object {
 }
 
 func TestConversionModuleBasic(t *testing.T) {
-	src := `转换模块.toString(转换模块.toFloat("3.5"))`
+	src := `转换模块.转字符串(转换模块.转小数("3.5"))`
 	if got := evalConversionModule(t, src).Inspect(); got != "3.5" {
 		t.Fatalf("结果为 %s，期望 3.5", got)
 	}
 }
 
 func TestConversionModuleParseError(t *testing.T) {
-	src := `变量 值, 错误值 = 转换模块.parseStringAsInt("bad")
+	src := `变量 值, 错误值 = 转换模块.解析整数("bad")
 错误值 != 空`
 	if got := evalConversionModule(t, src).Inspect(); got != "真" {
 		t.Fatalf("结果为 %s，期望 真", got)

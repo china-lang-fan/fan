@@ -45,14 +45,14 @@ func evalMathModule(t *testing.T, src string) object.Object {
 }
 
 func TestMathModuleBasics(t *testing.T) {
-	src := `数学模块.clamp(数学模块.abs(-5), 0, 3)`
+	src := `数学模块.限制范围(数学模块.绝对值(-5), 0, 3)`
 	if got := evalMathModule(t, src).Inspect(); got != "3" {
 		t.Fatalf("结果为 %s，期望 3", got)
 	}
 }
 
 func TestMathModulePowers(t *testing.T) {
-	src := `数学模块.pow(数学模块.sqrt(4), 2)`
+	src := `数学模块.幂(数学模块.平方根(4), 2)`
 	if got := evalMathModule(t, src).Inspect(); got != "4" {
 		t.Fatalf("结果为 %s，期望 4", got)
 	}

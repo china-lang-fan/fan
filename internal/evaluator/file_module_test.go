@@ -50,7 +50,7 @@ func TestFileModuleReadWrite(t *testing.T) {
 	if err := os.WriteFile(path, []byte("内容"), 0600); err != nil {
 		t.Fatalf("写入测试文件失败：%v", err)
 	}
-	src := `变量 内容, 错误值 = 文件模块.read("` + path + `")
+	src := `变量 内容, 错误值 = 文件模块.读取("` + path + `")
 如果 错误值 != 空 那么
     返回 错误值
 结束
@@ -61,14 +61,14 @@ func TestFileModuleReadWrite(t *testing.T) {
 }
 
 func TestFileModuleTempAndStat(t *testing.T) {
-	src := `变量 目录, 临时错误 = 文件模块.tempDir("fan-go-")
+	src := `变量 目录, 临时错误 = 文件模块.临时目录("fan-go-")
 如果 临时错误 != 空 那么
     返回 临时错误
 结束
-变量 创建错误 = 文件模块.write(文件模块.join(目录, "a.txt"), "x")
-变量 信息, 信息错误 = 文件模块.stat(目录)
-文件模块.removeAll(目录)
-如果 创建错误 != 空 或 信息错误 != 空 那么
+变量 创建错误 = 文件模块.写入(文件模块.拼路径(目录, "a.txt"), "x")
+变量 信息, 信息错误 = 文件模块.信息(目录)
+变量 删除错误 = 文件模块.删除全部(目录)
+如果 创建错误 != 空 或 信息错误 != 空 或 删除错误 != 空 那么
     返回 "失败"
 结束
 信息["name"]`

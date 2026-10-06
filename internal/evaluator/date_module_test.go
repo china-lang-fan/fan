@@ -45,17 +45,17 @@ func evalDateModule(t *testing.T, src string) object.Object {
 }
 
 func TestDateModuleBasic(t *testing.T) {
-	src := `变量 时间戳, 错误值 = 日期模块.fromYMD(2020, 1, 1)
-日期模块.formatDate(时间戳)`
+	src := `变量 时间戳, 错误值 = 日期模块.从年月日(2020, 1, 1)
+日期模块.格式化日期(时间戳)`
 	if got := evalDateModule(t, src).Inspect(); got != "2020-01-01" {
 		t.Fatalf("结果为 %s，期望 2020-01-01", got)
 	}
 }
 
 func TestDateModuleAge(t *testing.T) {
-	src := `变量 出生, 错误一 = 日期模块.fromYMD(2000, 6, 15)
-变量 当前, 错误二 = 日期模块.fromYMD(2020, 6, 15)
-日期模块.age(出生, 当前)`
+	src := `变量 出生, 错误一 = 日期模块.从年月日(2000, 6, 15)
+变量 当前, 错误二 = 日期模块.从年月日(2020, 6, 15)
+日期模块.周岁(出生, 当前)`
 	if got := evalDateModule(t, src).Inspect(); got != "20" {
 		t.Fatalf("结果为 %s，期望 20", got)
 	}

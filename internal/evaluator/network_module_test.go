@@ -60,7 +60,7 @@ func TestNetworkModuleGet(t *testing.T) {
 	}))
 	defer server.Close()
 
-	src := `变量 结果, 错误值 = 网络模块.get("` + server.URL + `?name=%E5%87%A1", {"timeout": 2})
+	src := `变量 结果, 错误值 = 网络模块.获取("` + server.URL + `?name=%E5%87%A1", {"timeout": 2})
 如果 错误值 != 空 那么
     错误值
 否则
@@ -84,7 +84,7 @@ func TestNetworkModulePostJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	src := `变量 值, 错误值 = 网络模块.postJSON("` + server.URL + `", {"name": "凡"}, {"timeout": 2})
+	src := `变量 值, 错误值 = 网络模块.提交JSON("` + server.URL + `", {"name": "凡"}, {"timeout": 2})
 如果 错误值 != 空 那么
     错误值
 否则
@@ -103,7 +103,7 @@ func TestNetworkModuleDownload(t *testing.T) {
 	env, dir := setupNetworkModule(t)
 	target := filepath.Join(dir, "下载.txt")
 	progAST, errs := parser.ParseProgram(`导入 "网络" 作为 网络模块
-网络模块.download("` + server.URL + `", "` + target + `", {"timeout": 2})`)
+网络模块.下载("` + server.URL + `", "` + target + `", {"timeout": 2})`)
 	if len(errs) > 0 {
 		t.Fatalf("解析失败：%v", errs)
 	}

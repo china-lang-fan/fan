@@ -45,7 +45,7 @@ func evalRandomModule(t *testing.T, src string) object.Object {
 }
 
 func TestRandomModuleBounds(t *testing.T) {
-	src := `变量 值 = 随机模块.int(5)
+	src := `变量 值 = 随机模块.随机整数(5)
 值 >= 0 且 值 < 5`
 	if got := evalRandomModule(t, src).Inspect(); got != "真" {
 		t.Fatalf("结果为 %s，期望 真", got)
@@ -53,7 +53,7 @@ func TestRandomModuleBounds(t *testing.T) {
 }
 
 func TestRandomModuleSample(t *testing.T) {
-	src := `长度(随机模块.sample([1, 2, 3], 2))`
+	src := `长度(随机模块.抽样([1, 2, 3], 2))`
 	if got := evalRandomModule(t, src).Inspect(); got != "2" {
 		t.Fatalf("结果为 %s，期望 2", got)
 	}

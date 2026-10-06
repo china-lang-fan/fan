@@ -2,101 +2,101 @@
 导入 "系统" 作为 系统模块
 
 @内建("processArgs")
-函数 getArgs()
+函数 参数原语()
     返回 []
 结束
 
 @内建("processScript")
-函数 getScript()
+函数 脚本原语()
     返回 ""
 结束
 
 @内建("processEnv")
-函数 getEnvValue(名称)
+函数 环境变量原语(名称)
     返回 ""
 结束
 
 @内建("processSetEnv")
-函数 setEnvValue(名称, 值)
+函数 设置环境变量原语(名称, 值)
     返回 空
 结束
 
 @内建("processWorkingDir")
-函数 getWorkingDirectory()
+函数 工作目录原语()
     返回 ""
 结束
 
 @内建("processChangeDir")
-函数 changeWorkingDirectory(路径)
+函数 切换目录原语(路径)
     返回 空
 结束
 
 @内建("processPID")
-函数 getProcessID()
+函数 进程号原语()
     返回 0
 结束
 
 @内建("processParentPID")
-函数 getParentProcessID()
+函数 父进程号原语()
     返回 0
 结束
 
 @内建("processExecute")
-函数 executeProcess(命令, 参数, 选项)
+函数 执行进程原语(命令, 参数, 选项)
     返回 空, 空
 结束
 
-导出 函数 args()
-    返回 getArgs()
+导出 函数 参数()
+    返回 参数原语()
 结束
 
-导出 函数 script() -> 字符串
-    返回 getScript()
+导出 函数 脚本() -> 字符串
+    返回 脚本原语()
 结束
 
-导出 函数 env(名称 字符串) -> 字符串
-    返回 getEnvValue(名称)
+导出 函数 环境变量(名称 字符串) -> 字符串
+    返回 环境变量原语(名称)
 结束
 
-导出 函数 setEnv(名称 字符串, 值 字符串) -> 错误
-    返回 setEnvValue(名称, 值)
+导出 函数 设置环境变量(名称 字符串, 值 字符串) -> 错误
+    返回 设置环境变量原语(名称, 值)
 结束
 
-导出 函数 workingDir() -> 字符串
-    返回 getWorkingDirectory()
+导出 函数 工作目录() -> 字符串
+    返回 工作目录原语()
 结束
 
-导出 函数 changeDir(路径 字符串) -> 错误
-    返回 changeWorkingDirectory(路径)
+导出 函数 切换目录(路径 字符串) -> 错误
+    返回 切换目录原语(路径)
 结束
 
-导出 函数 pid() -> 整数
-    返回 getProcessID()
+导出 函数 进程号() -> 整数
+    返回 进程号原语()
 结束
 
-导出 函数 parentPid() -> 整数
-    返回 getParentProcessID()
+导出 函数 父进程号() -> 整数
+    返回 父进程号原语()
 结束
 
-导出 函数 run(命令 字符串, 参数 = [], 选项 = 空)
+导出 函数 运行(命令 字符串, 参数 = [], 选项 = 空)
     变量 参数值 = 参数
-    如果 系统模块.type(参数值) != "array" 那么
+    如果 系统模块.类型名(参数值) != "array" 那么
         参数值 = []
     结束
     变量 选项值 = 选项
-    如果 系统模块.type(选项值) != "dict" 那么
+    如果 系统模块.类型名(选项值) != "dict" 那么
         选项值 = {}
     结束
-    返回 executeProcess(命令, 参数值, 选项值)
+    返回 执行进程原语(命令, 参数值, 选项值)
 结束
 
-导出 函数 output(命令 字符串, 参数 = [], 选项 = 空)
-    变量 结果, 错误值 = run(命令, 参数, 选项)
+导出 函数 输出(命令 字符串, 参数 = [], 选项 = 空)
+    变量 结果, 错误值 = 运行(命令, 参数, 选项)
     如果 错误值 != 空 那么
         返回 "", 错误值
     结束
     如果 !结果["success"] 那么
-        返回 "", 系统模块.error("命令执行失败，退出码 " + 转换模块.toString(结果["exitCode"]) + "，错误输出：" + 结果["stderr"])
+        返回 "", 系统模块.构造错误("命令执行失败，退出码 " + 转换模块.转字符串(结果["exitCode"]) + "，错误输出：" + 结果["stderr"])
     结束
     返回 结果["stdout"], 空
 结束

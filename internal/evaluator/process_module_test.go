@@ -46,13 +46,13 @@ func evalProcessModule(t *testing.T, src string) object.Object {
 }
 
 func TestProcessModulePID(t *testing.T) {
-	if got := evalProcessModule(t, `进程模块.pid()`).Inspect(); got == "0" {
+	if got := evalProcessModule(t, `进程模块.进程号()`).Inspect(); got == "0" {
 		t.Fatalf("进程号不应为 0")
 	}
 }
 
 func TestProcessModuleExecute(t *testing.T) {
-	src := `变量 结果, 错误值 = 进程模块.run("go", ["version"])
+	src := `变量 结果, 错误值 = 进程模块.运行("go", ["version"])
 如果 错误值 != 空 那么
     错误值
 否则

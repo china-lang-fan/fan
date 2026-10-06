@@ -51,9 +51,9 @@ func TestArrayModuleTransforms(t *testing.T) {
 函数 是偶数(值 整数) -> 布尔
     返回 值 取余 2 == 0
 结束
-变量 映射 = 数组模块.map([1, 2], 加倍)
-变量 过滤 = 数组模块.filter([1, 2, 3, 4], 是偶数)
-数组模块.flatten([映射, 过滤])`
+变量 映射 = 数组模块.映射([1, 2], 加倍)
+变量 过滤 = 数组模块.过滤([1, 2, 3, 4], 是偶数)
+数组模块.展开([映射, 过滤])`
 	if got := evalArrayModule(t, src).Inspect(); got != "[2, 4, 2, 4]" {
 		t.Fatalf("结果为 %s，期望 [2, 4, 2, 4]", got)
 	}
@@ -64,9 +64,9 @@ func TestArrayModuleSorting(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`数组模块.sort([3, 1, 2])`, "[1, 2, 3]"},
-		{`数组模块.sort(["c", "a", "b"])`, "[a, b, c]"},
-		{`数组模块.reverse([1, 2, 3])`, "[3, 2, 1]"},
+		{`数组模块.排序([3, 1, 2])`, "[1, 2, 3]"},
+		{`数组模块.排序(["c", "a", "b"])`, "[a, b, c]"},
+		{`数组模块.反转([1, 2, 3])`, "[3, 2, 1]"},
 	}
 	for _, tc := range cases {
 		if got := evalArrayModule(t, tc.src).Inspect(); got != tc.want {

@@ -45,7 +45,7 @@ func evalRegexModule(t *testing.T, src string) object.Object {
 }
 
 func TestRegexModuleMatch(t *testing.T) {
-	src := `变量 值, 错误值 = 正则模块.match("\\d+", "a12")
+	src := `变量 值, 错误值 = 正则模块.匹配("\\d+", "a12")
 值`
 	if got := evalRegexModule(t, src).Inspect(); got != "真" {
 		t.Fatalf("结果为 %s，期望 真", got)
@@ -53,7 +53,7 @@ func TestRegexModuleMatch(t *testing.T) {
 }
 
 func TestRegexModuleReplace(t *testing.T) {
-	src := `变量 值, 错误值 = 正则模块.replaceAll("(\\w+)", "a b", "[$1]")
+	src := `变量 值, 错误值 = 正则模块.全部替换("(\\w+)", "a b", "[$1]")
 值`
 	if got := evalRegexModule(t, src).Inspect(); got != "[a] [b]" {
 		t.Fatalf("结果为 %s，期望 [a] [b]", got)
