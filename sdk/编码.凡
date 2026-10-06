@@ -1,0 +1,71 @@
+@内建("jsonEncode")
+函数 encodeJSON(值)
+    返回 "", 空
+结束
+
+@内建("jsonDecode")
+函数 decodeJSON(值)
+    返回 空, 空
+结束
+
+@内建("base64Encode")
+函数 encodeBase64(值)
+    返回 ""
+结束
+
+@内建("base64Decode")
+函数 decodeBase64(值)
+    返回 "", 空
+结束
+
+@内建("urlEncode")
+函数 encodeURL(值)
+    返回 ""
+结束
+
+@内建("urlDecode")
+函数 decodeURL(值)
+    返回 "", 空
+结束
+
+@内建("hexEncode")
+函数 encodeHex(值)
+    返回 ""
+结束
+
+@内建("hexDecode")
+函数 decodeHex(值)
+    返回 "", 空
+结束
+
+导出 函数 jsonString(值)
+    返回 encodeJSON(值)
+结束
+
+导出 函数 parseJSON(文本 字符串)
+    返回 decodeJSON(文本)
+结束
+
+导出 函数 base64String(值 字符串) -> 字符串
+    返回 encodeBase64(值)
+结束
+
+导出 函数 parseBase64(文本 字符串)
+    返回 decodeBase64(文本)
+结束
+
+导出 函数 urlQueryString(值 字符串) -> 字符串
+    返回 encodeURL(值)
+结束
+
+导出 函数 parseURLQuery(文本 字符串)
+    返回 decodeURL(文本)
+结束
+
+导出 函数 hexString(值 字符串) -> 字符串
+    返回 encodeHex(值)
+结束
+
+导出 函数 parseHex(文本 字符串)
+    返回 decodeHex(文本)
+结束
