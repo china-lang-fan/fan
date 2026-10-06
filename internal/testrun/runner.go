@@ -115,7 +115,7 @@ func (r Runner) runFile(path string, root string) FileResult {
 	}
 	env := evaluator.NewEnvironment()
 	env.BaseDir = filepath.Dir(path)
-	env.Loader = evaluator.NewLoader(env.BaseDir)
+	env.SetLoader(evaluator.NewLoader(env.BaseDir))
 	if _, err := evaluator.Eval(prog, env); err != nil {
 		return FileResult{Path: path, SetupError: err.Error()}
 	}

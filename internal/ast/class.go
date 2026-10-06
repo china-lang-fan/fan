@@ -19,10 +19,12 @@ type ClassStmt struct {
 }
 
 type MethodDef struct {
-	Position   Position
-	ClassName  string
-	MethodName string
-	Function   *FunctionLiteral
+	Position     Position
+	ClassName    string
+	MethodName   string
+	Function     *FunctionLiteral
+	Primitive    bool
+	ReceiverName string
 }
 
 func (n *ClassStmt) Pos() Position  { return n.Position }

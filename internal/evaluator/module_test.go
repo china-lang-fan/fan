@@ -19,7 +19,7 @@ func moduleTestEnv() *Environment {
 	dir := testdataDir()
 	env := NewEnvironment()
 	env.BaseDir = dir
-	env.Loader = NewLoader(dir)
+	env.SetLoader(NewLoader(dir))
 	return env
 }
 
@@ -64,6 +64,17 @@ func TestModuleImportClass(t *testing.T) {
 	}
 	if res.Inspect() != "5" {
 		t.Fatalf("模块模型实例化错误：%s", res.Inspect())
+	}
+}
+
+func TestModuleImportPrimitiveMethod(t *testing.T) {
+	src := "导入 \"lib/工具\"\n\"x\".库标记()"
+	res, err := runModuleSource(t, src)
+	if err != nil {
+		t.Fatalf("运行错误：%v", err)
+	}
+	if res.Inspect() != "x-库" {
+		t.Fatalf("模块原生方法调用错误：%s", res.Inspect())
 	}
 }
 

@@ -175,6 +175,10 @@ func (p *Parser) parseStatement() ast.Statement {
 			return p.parseClassStatement()
 		case p.cur.Type == token.IDENT && p.peek.Type == token.MEMBER:
 			return p.parseIdentMemberStatement()
+		case p.cur.Type == token.IDENT && isTypeToken(p.peek.Type) && p.peekTwo().Type == token.MEMBER:
+			return p.parseMethodDefinition()
+		case isTypeToken(p.cur.Type) && p.peek.Type == token.MEMBER:
+			return p.parseMethodDefinition()
 		default:
 			return p.parseVarDecl()
 		}
@@ -186,6 +190,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseClassStatement()
 	case p.cur.Type == token.IDENT && p.peek.Type == token.MEMBER:
 		return p.parseIdentMemberStatement()
+	case p.cur.Type == token.IDENT && isTypeToken(p.peek.Type) && p.peekTwo().Type == token.MEMBER:
+		return p.parseMethodDefinition()
+	case isTypeToken(p.cur.Type) && p.peek.Type == token.MEMBER:
+		return p.parseMethodDefinition()
 	case p.cur.Type == token.BREAK:
 		stmt := &ast.BreakStmt{Position: ast.Position{Line: p.cur.Line, Column: p.cur.Column}}
 		p.next()
@@ -1594,7 +1602,7 @@ func (p *Parser) parseParamList() ([]ast.Parameter, bool) {
 			p.next()
 			return params, true
 		}
-		if p.cur.Type != token.IDENT {
+		if p.cur.Type != token.IDENT && p.cur.Type != token.SELF {
 			p.addError(p.cur, "参数名应为标识符")
 			p.parenDepth--
 			return nil, false
@@ -1804,15 +1812,26 @@ func (p *Parser) peekTwo() token.Token {
 
 func (p *Parser) parseMethodDefinition() ast.Statement {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	receiverName := "自己"
 	className := p.cur.Literal
+	primitive := isTypeToken(p.cur.Type)
+	if primitive && p.peek.Type != token.MEMBER {
+		return nil
+	}
+	if !primitive && isTypeToken(p.peek.Type) && p.peekTwo().Type == token.MEMBER {
+		receiverName = p.cur.Literal
+		p.next()
+		className = p.cur.Literal
+		primitive = true
+	}
 	p.next()
 	if p.cur.Type != token.MEMBER {
-		p.addError(p.cur, "方法定义应为：定义 模型名 的 方法 …")
+		p.addError(p.cur, "方法定义应为：定义 类型 的 方法 …")
 		return nil
 	}
 	p.next()
 	if p.cur.Type != token.METHOD {
-		p.addError(p.cur, "模型成员定义应使用 方法 关键字")
+		p.addError(p.cur, "类型成员定义应使用 方法 关键字")
 		return nil
 	}
 	p.next()
@@ -1835,9 +1854,11 @@ func (p *Parser) parseMethodDefinition() ast.Statement {
 		return nil
 	}
 	return &ast.MethodDef{
-		Position:   pos,
-		ClassName:  className,
-		MethodName: methodName,
+		Position:     pos,
+		ClassName:    className,
+		MethodName:   methodName,
+		ReceiverName: receiverName,
+		Primitive:    primitive,
 		Function: &ast.FunctionLiteral{
 			Position:    pos,
 			Params:      params,

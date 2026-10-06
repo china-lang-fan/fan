@@ -12,9 +12,10 @@ import (
 )
 
 type Loader struct {
-	cache      map[string]*object.Module
-	loading    map[string]bool
-	modulesDir string
+	cache             map[string]*object.Module
+	loading           map[string]bool
+	modulesDir        string
+	primitiveRegistry *primitiveMethodRegistry
 }
 
 func NewLoader(modulesDir string) *Loader {
@@ -117,7 +118,13 @@ func (l *Loader) Load(importerBase string, path string) (*object.Module, error) 
 	}
 
 	base := filepath.Dir(full)
+	registry := l.primitiveRegistry
+	if registry == nil {
+		registry = newPrimitiveMethodRegistry()
+		l.primitiveRegistry = registry
+	}
 	env := NewEnvironment()
+	env.primitiveRegistry = registry
 	env.BaseDir = base
 	env.Loader = l
 	env.moduleExport = true
@@ -146,7 +153,7 @@ func moduleNameFromPath(full string) string {
 
 func evalImportStmt(stmt *ast.ImportStmt, env *Environment) (object.Object, error) {
 	if env.Loader == nil {
-		env.Loader = NewLoader(env.BaseDir)
+		env.SetLoader(NewLoader(env.BaseDir))
 	}
 	mod, err := env.Loader.Load(env.BaseDir, stmt.Path)
 	if err != nil {

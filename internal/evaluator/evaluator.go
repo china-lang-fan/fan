@@ -267,6 +267,9 @@ func evalMaybeCallExpr(expr *ast.MaybeCallExpr, env *Environment) (object.Object
 		if !expr.AutoCall {
 			return evalFieldAccess(member, env, target)
 		}
+		if fn, ok := env.primitiveMethods().lookup(target, member.Name); ok && len(fn.Params) == 1 {
+			return applyFunction(fn, []object.Object{target}, expr.Position)
+		}
 		if inst, ok := target.(*Instance); ok {
 			if fn := inst.Class.lookupMethod(member.Name); fn != nil && len(fn.Params) == 0 {
 				return applyFunction(fn.bind(inst), nil, expr.Position)
@@ -631,6 +634,9 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 		args = append(args, v)
 	}
 	args = spreadTuples(args)
+	if fn, ok := env.primitiveMethods().lookup(obj, member.Name); ok {
+		return applyFunction(fn, append([]object.Object{obj}, args...), node.Position)
+	}
 	switch target := obj.(type) {
 	case *Instance:
 		fn, err := target.getMethod(member.Name)

@@ -83,6 +83,9 @@ func evalClassStmt(stmt *ast.ClassStmt, env *Environment) (object.Object, error)
 }
 
 func evalMethodDef(stmt *ast.MethodDef, env *Environment) (object.Object, error) {
+	if stmt.Primitive {
+		return evalPrimitiveMethodDef(stmt, env)
+	}
 	val, ok := env.get(stmt.ClassName)
 	if !ok {
 		return nil, &EvalError{Pos: stmt.Position, Reason: fmt.Sprintf("模型 %s 未定义", stmt.ClassName)}

@@ -77,7 +77,7 @@ func runFile(path string, scriptArgs []string) error {
 	dir := filepath.Dir(absPath(path))
 	env := evaluator.NewEnvironment()
 	env.BaseDir = dir
-	env.Loader = evaluator.NewLoader(dir)
+	env.SetLoader(evaluator.NewLoader(dir))
 	if _, err := evaluator.Eval(prog, env); err != nil {
 		return err
 	}

@@ -15,15 +15,16 @@ type binding struct {
 }
 
 type Environment struct {
-	store        map[string]*binding
-	outer        *Environment
-	BaseDir      string
-	Loader       *Loader
-	moduleExport bool
+	store             map[string]*binding
+	outer             *Environment
+	BaseDir           string
+	Loader            *Loader
+	moduleExport      bool
+	primitiveRegistry *primitiveMethodRegistry
 }
 
 func NewEnvironment() *Environment {
-	return &Environment{store: map[string]*binding{}}
+	return &Environment{store: map[string]*binding{}, primitiveRegistry: newPrimitiveMethodRegistry()}
 }
 
 func (e *Environment) SetBaseDir(dir string) {
@@ -32,6 +33,13 @@ func (e *Environment) SetBaseDir(dir string) {
 
 func (e *Environment) SetLoader(l *Loader) {
 	e.Loader = l
+	if l != nil {
+		if l.primitiveRegistry == nil {
+			l.primitiveRegistry = e.primitiveMethods()
+		} else {
+			e.primitiveRegistry = l.primitiveRegistry
+		}
+	}
 }
 
 func NewEnclosedEnvironment(outer *Environment) *Environment {
