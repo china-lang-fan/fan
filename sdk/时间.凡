@@ -1,0 +1,87 @@
+@内建("nowUnix")
+函数 nowTimestamp()
+    返回 0
+结束
+
+@内建("nowUnixMilli")
+函数 nowMillisecondTimestamp()
+    返回 0
+结束
+
+@内建("formatTime")
+函数 formatTimestamp(时间戳, 布局)
+    返回 ""
+结束
+
+@内建("parseTime")
+函数 parseTimestamp(布局, 值)
+    返回 0, 空
+结束
+
+@内建("sleep")
+函数 sleepSeconds(秒数)
+结束
+
+@内建("timeParts")
+函数 getTimeParts(时间戳)
+    返回 空
+结束
+
+导出 常量 defaultFormat = "2006-01-02 15:04:05"
+导出 常量 dateFormat = "2006-01-02"
+
+导出 函数 now() -> 整数
+    返回 nowTimestamp()
+结束
+
+导出 函数 nowMilli() -> 整数
+    返回 nowMillisecondTimestamp()
+结束
+
+导出 函数 format(时间戳 整数, 布局 字符串 = defaultFormat) -> 字符串
+    返回 formatTimestamp(时间戳, 布局)
+结束
+
+导出 函数 formatNow(布局 字符串 = defaultFormat) -> 字符串
+    返回 formatTimestamp(nowTimestamp(), 布局)
+结束
+
+导出 函数 parse(布局 字符串, 值 字符串)
+    返回 parseTimestamp(布局, 值)
+结束
+
+导出 函数 parseDefault(value 字符串)
+    返回 parseTimestamp(defaultFormat, value)
+结束
+
+导出 函数 parseDate(value 字符串)
+    返回 parseTimestamp(dateFormat, value)
+结束
+
+导出 函数 sleep(秒数 整数)
+    sleepSeconds(秒数)
+结束
+
+导出 函数 parts(时间戳 整数)
+    返回 getTimeParts(时间戳)
+结束
+
+导出 函数 today() -> 字符串
+    返回 formatTimestamp(nowTimestamp(), dateFormat)
+结束
+
+导出 函数 addSeconds(时间戳 整数, 秒数 整数) -> 整数
+    返回 时间戳 + 秒数
+结束
+
+导出 函数 addMinutes(时间戳 整数, 分钟数 整数) -> 整数
+    返回 时间戳 + 分钟数 * 60
+结束
+
+导出 函数 addHours(时间戳 整数, 小时数 整数) -> 整数
+    返回 时间戳 + 小时数 * 3600
+结束
+
+导出 函数 addDays(时间戳 整数, 天数 整数) -> 整数
+    返回 时间戳 + 天数 * 86400
+结束
