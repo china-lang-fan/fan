@@ -34,9 +34,9 @@ func run(args []string) error {
 		return nil
 	case "run":
 		if len(args) < 2 {
-			return fmt.Errorf("用法：fan run <脚本.fan>")
+			return fmt.Errorf("用法：fan run <脚本.fan> [参数...]")
 		}
-		return runFile(args[1])
+		return runFile(args[1], args[2:])
 	case "test":
 		target := "."
 		if len(args) >= 2 {
@@ -60,7 +60,9 @@ func run(args []string) error {
 	}
 }
 
-func runFile(path string) error {
+func runFile(path string, scriptArgs []string) error {
+	evaluator.SetProcessContext(path, scriptArgs)
+	defer evaluator.ResetProcessContext()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -128,7 +130,7 @@ func runREPL(in io.Reader, out io.Writer) error {
 func printUsage() {
 	fmt.Println("凡语言 —— 中文通用脚本语言（命令名：fan）")
 	fmt.Println("用法：")
-	fmt.Println("  fan run <脚本.fan>   运行脚本")
+	fmt.Println("  fan run <脚本.fan> [参数...]   运行脚本")
 	fmt.Println("  fan test [路径]      运行测试")
 	fmt.Println("  fan repl             进入交互模式")
 	fmt.Println("  fan version          显示版本")
