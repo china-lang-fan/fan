@@ -81,12 +81,45 @@ func TestImplicitCallNormal(t *testing.T) {
 func TestImplicitReceiverCall(t *testing.T) {
 	prog := mustParse(t, `名单 追加 "张三"`)
 	stmt := prog.Statements[0].(*ast.ExpressionStmt)
-	call := stmt.Expression.(*ast.CallExpr)
-	if call.Callee.(*ast.Identifier).Name != "追加" {
-		t.Fatalf("方法名应为 追加，实际 %s", call.Callee.String())
+	call := stmt.Expression.(*ast.ImplicitReceiverCallExpr)
+	if call.Name != "追加" {
+		t.Fatalf("方法名应为 追加，实际 %s", call.String())
 	}
-	if len(call.Args) != 2 || call.Args[0].String() != "名单" {
-		t.Fatalf("接收者应作为首参，实际 %s", call.String())
+	if call.Receiver.String() != "名单" || len(call.Args) != 1 {
+		t.Fatalf("接收者和参数解析错误，实际 %s", call.String())
+	}
+}
+
+func TestLiteralImplicitReceiverCall(t *testing.T) {
+	prog := mustParse(t, `"a,b,c" 拆分(",")`)
+	stmt := prog.Statements[0].(*ast.ExpressionStmt)
+	call := stmt.Expression.(*ast.ImplicitReceiverCallExpr)
+	if call.Name != "拆分" {
+		t.Fatalf("方法名错误：%s", call.String())
+	}
+	if _, ok := call.Receiver.(*ast.StringLiteral); !ok || len(call.Args) != 1 {
+		t.Fatalf("字面量接收者解析错误：%s", call.String())
+	}
+}
+
+func TestLiteralImplicitReceiverNoArgCall(t *testing.T) {
+	prog := mustParse(t, `"abc" 转大写`)
+	stmt := prog.Statements[0].(*ast.ExpressionStmt)
+	call := stmt.Expression.(*ast.ImplicitReceiverCallExpr)
+	if call.Name != "转大写" || len(call.Args) != 0 {
+		t.Fatalf("无参接收者方法解析错误：%s", call.String())
+	}
+}
+
+func TestLiteralImplicitReceiverChainedCall(t *testing.T) {
+	prog := mustParse(t, `"a,b,c" 拆分(",") 反转`)
+	stmt := prog.Statements[0].(*ast.ExpressionStmt)
+	call := stmt.Expression.(*ast.ImplicitReceiverCallExpr)
+	if call.Name != "反转" || len(call.Args) != 0 {
+		t.Fatalf("链式方法解析错误：%s", call.String())
+	}
+	if _, ok := call.Receiver.(*ast.ImplicitReceiverCallExpr); !ok {
+		t.Fatalf("前一方法调用解析错误：%s", call.String())
 	}
 }
 
@@ -122,12 +155,12 @@ func TestImplicitCallMultipleArgsWithParens(t *testing.T) {
 func TestImplicitReceiverCallWithMultipleArgs(t *testing.T) {
 	prog := mustParse(t, `名单 追加 "张三", 18`)
 	stmt := prog.Statements[0].(*ast.ExpressionStmt)
-	call := stmt.Expression.(*ast.CallExpr)
-	if call.Callee.(*ast.Identifier).Name != "追加" {
-		t.Fatalf("方法名应为 追加，实际 %s", call.Callee.String())
+	call := stmt.Expression.(*ast.ImplicitReceiverCallExpr)
+	if call.Name != "追加" {
+		t.Fatalf("方法名应为 追加，实际 %s", call.String())
 	}
-	if len(call.Args) != 3 {
-		t.Fatalf("应有 3 个参数（含接收者），实际 %d", len(call.Args))
+	if len(call.Args) != 2 {
+		t.Fatalf("应有 2 个参数，实际 %d", len(call.Args))
 	}
 }
 

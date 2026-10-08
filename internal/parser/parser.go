@@ -697,24 +697,33 @@ func isImplicitCallEnd(t token.Type) bool {
 }
 
 func (p *Parser) parseImplicitCall(head ast.Expression) ast.Expression {
-	if p.cur.Type == token.IDENT {
-		if _, isIdent := head.(*ast.Identifier); isIdent && p.peek.Type != token.MEMBER {
-			ident, _ := head.(*ast.Identifier)
-			method := p.cur.Literal
-			pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
-			p.next()
-			args, ok := p.parseImplicitArgs()
-			if !ok {
-				return nil
-			}
-			fullArgs := append([]ast.Expression{ident}, args...)
-			return &ast.CallExpr{
-				Position: pos,
-				Callee:   &ast.Identifier{Position: pos, Name: method},
-				Args:     fullArgs,
-			}
+	if p.cur.Type != token.IDENT {
+		return p.parseImplicitFunctionArgs(head)
+	}
+	if p.peek.Type == token.MEMBER || p.peek.Type == token.DOT {
+		return p.parseImplicitFunctionArgs(head)
+	}
+	name := p.cur.Literal
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	p.next()
+	var args []ast.Expression
+	if p.cur.Type == token.LPAREN {
+		var ok bool
+		args, ok = p.parseArgs()
+		if !ok {
+			return nil
+		}
+	} else {
+		var ok bool
+		args, ok = p.parseImplicitArgs()
+		if !ok {
+			return nil
 		}
 	}
+	return p.parsePostfix(&ast.ImplicitReceiverCallExpr{Position: pos, Receiver: head, Name: name, Args: args})
+}
+
+func (p *Parser) parseImplicitFunctionArgs(head ast.Expression) ast.Expression {
 	args, ok := p.parseImplicitArgs()
 	if !ok {
 		return nil

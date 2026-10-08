@@ -98,6 +98,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return evalTernaryExpr(n, env)
 	case *ast.BinaryExpr:
 		return evalBinaryExpr(n, env)
+	case *ast.ImplicitReceiverCallExpr:
+		return evalImplicitReceiverCallExpr(n, env)
 	case *ast.UnaryExpr:
 		return evalUnaryExpr(n, env)
 	}

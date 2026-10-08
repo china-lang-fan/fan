@@ -99,3 +99,20 @@ func (n *MemberExpr) expressionNode() {}
 func (n *MemberExpr) String() string {
 	return fmt.Sprintf("%s 的 %s", n.Object.String(), n.Name)
 }
+
+type ImplicitReceiverCallExpr struct {
+	Position Position
+	Receiver Expression
+	Name     string
+	Args     []Expression
+}
+
+func (n *ImplicitReceiverCallExpr) Pos() Position   { return n.Position }
+func (n *ImplicitReceiverCallExpr) expressionNode() {}
+func (n *ImplicitReceiverCallExpr) String() string {
+	parts := make([]string, len(n.Args))
+	for i, arg := range n.Args {
+		parts[i] = arg.String()
+	}
+	return fmt.Sprintf("%s %s(%s)", n.Receiver.String(), n.Name, strings.Join(parts, ", "))
+}
