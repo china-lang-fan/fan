@@ -1378,13 +1378,14 @@ func (p *Parser) parseTryStatement() ast.Statement {
 
 func (p *Parser) parseMember(left ast.Expression) ast.Expression {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	connector := p.cur.Literal
 	p.next()
 	if p.cur.Type != token.IDENT {
 		p.addError(p.cur, "的 后面需要成员名")
 		return nil
 	}
 	name := p.cur.Literal
-	node := &ast.MemberExpr{Position: pos, Object: left, Name: name}
+	node := &ast.MemberExpr{Position: pos, Object: left, Name: name, Connector: connector}
 	p.next()
 	if p.cur.Type == token.LPAREN {
 		args, ok := p.parseArgs()
@@ -1495,6 +1496,42 @@ func (p *Parser) parseFunctionStatement() ast.Statement {
 	if !ok {
 		return nil
 	}
+	segments := []string{name}
+	connectors := []string{""}
+	groupSizes := []int{len(params)}
+	for p.cur.Type == token.MEMBER && p.peek.Type == token.IDENT || p.cur.Type == token.IDENT {
+		connector := ""
+		if p.cur.Type == token.MEMBER {
+			connector = p.cur.Literal
+			p.next()
+		}
+		segmentName := p.cur.Literal
+		p.next()
+		if p.cur.Type != token.LPAREN {
+			p.addError(p.cur, "分段函数每段后应有参数列表")
+			return nil
+		}
+		nextParams, paramOK := p.parseParamList()
+		if !paramOK {
+			return nil
+		}
+		segments = append(segments, segmentName)
+		connectors = append(connectors, connector)
+		groupSizes = append(groupSizes, len(nextParams))
+		params = append(params, nextParams...)
+	}
+	var fullName strings.Builder
+	for i, segment := range segments {
+		fullName.WriteString(connectors[i])
+		fullName.WriteString(segment)
+	}
+	fullNameText := fullName.String()
+	if len(segments) > 1 {
+		if valid, reason := validateMixfixParams(segments, groupSizes, params); !valid {
+			p.addError(token.Token{Line: pos.Line, Column: pos.Column}, "%s", reason)
+			return nil
+		}
+	}
 	retTypes, ok := p.parseReturnTypes()
 	if !ok {
 		return nil
@@ -1503,19 +1540,66 @@ func (p *Parser) parseFunctionStatement() ast.Statement {
 	if !ok {
 		return nil
 	}
+	literal := &ast.FunctionLiteral{
+		Position:    pos,
+		Params:      params,
+		Body:        body,
+		Name:        fullNameText,
+		ReturnTypes: retTypes,
+		Tags:        nil,
+	}
+	if len(segments) > 1 {
+		literal.NameSegments = segments
+		literal.Connectors = connectors
+		literal.GroupSizes = groupSizes
+		literal.Signature = buildMixfixSignature(segments, connectors, groupSizes, params)
+	}
 	return &ast.VarDecl{
 		Position:   pos,
 		IsExplicit: false,
-		Name:       name,
-		Value: &ast.FunctionLiteral{
-			Position:    pos,
-			Params:      params,
-			Body:        body,
-			Name:        name,
-			ReturnTypes: retTypes,
-			Tags:        nil,
-		},
+		Name:       fullNameText,
+		Value:      literal,
 	}
+}
+
+func validateMixfixParams(segments []string, groupSizes []int, params []ast.Parameter) (bool, string) {
+	for _, size := range groupSizes {
+		if size == 0 {
+			return false, "分段函数每段至少需要一个参数"
+		}
+	}
+	if len(params) == 0 {
+		return false, "分段函数每段至少需要一个参数"
+	}
+	for _, param := range params {
+		if param.Type == ast.TypeAny {
+			return false, "分段函数参数必须显式声明类型"
+		}
+		if param.Variadic || param.Default != nil {
+			return false, "分段函数当前不支持默认参数或可变参数"
+		}
+	}
+	return true, ""
+}
+
+func buildMixfixSignature(segments []string, connectors []string, groupSizes []int, params []ast.Parameter) string {
+	var builder strings.Builder
+	index := 0
+	for segmentIndex, segment := range segments {
+		builder.WriteString(connectors[segmentIndex])
+		builder.WriteString(segment)
+		builder.WriteString("(")
+		groupSize := groupSizes[segmentIndex]
+		for offset := 0; offset < groupSize; offset++ {
+			if offset > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteString(string(params[index+offset].Type))
+		}
+		builder.WriteString(")")
+		index += groupSize
+	}
+	return builder.String()
 }
 
 func (p *Parser) parseFunctionLiteral() *ast.FunctionLiteral {

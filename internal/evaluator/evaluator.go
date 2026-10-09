@@ -169,6 +169,15 @@ func evalVarDecl(decl *ast.VarDecl, env *Environment) (object.Object, error) {
 	if err != nil {
 		return nil, err
 	}
+	if fn, ok := val.(*Function); ok && len(fn.NameSegments) > 1 {
+		root := fn.NameSegments[0]
+		if _, exists := env.find(root); exists {
+			return nil, &EvalError{Pos: decl.Position, Reason: fmt.Sprintf("分段函数首段名 %s 已被占用", root)}
+		}
+		if err := env.mixfixFunctions().register(fn.NameSegments, fn.Signature, fn); err != nil {
+			return nil, &EvalError{Pos: decl.Position, Reason: err.Error()}
+		}
+	}
 	if decl.IsExplicit {
 		if err := env.declare(decl.Name, val, decl.IsConst, decl.DeclType); err != nil {
 			return nil, &EvalError{Pos: decl.Position, Reason: err.Error()}
@@ -613,6 +622,9 @@ func evalReturnStmt(node *ast.ReturnStmt, env *Environment) (object.Object, erro
 }
 
 func evalCallExprDispatch(node *ast.CallExpr, env *Environment) (object.Object, error) {
+	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
+		return evalMixfixCall(chain, env, node.Position)
+	}
 	if member, ok := node.Callee.(*ast.MemberExpr); ok {
 		return evalMethodCall(node, member, env)
 	}
@@ -620,6 +632,9 @@ func evalCallExprDispatch(node *ast.CallExpr, env *Environment) (object.Object, 
 }
 
 func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment) (object.Object, error) {
+	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
+		return evalMixfixCall(chain, env, node.Position)
+	}
 	obj, err := Eval(member.Object, env)
 	if err != nil {
 		return nil, err

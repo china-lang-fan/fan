@@ -16,6 +16,7 @@ type Loader struct {
 	loading           map[string]bool
 	modulesDir        string
 	primitiveRegistry *primitiveMethodRegistry
+	mixfixRegistry    *mixfixFunctionRegistry
 }
 
 func NewLoader(modulesDir string) *Loader {
@@ -123,8 +124,14 @@ func (l *Loader) Load(importerBase string, path string) (*object.Module, error) 
 		registry = newPrimitiveMethodRegistry()
 		l.primitiveRegistry = registry
 	}
+	mixfixRegistry := l.mixfixRegistry
+	if mixfixRegistry == nil {
+		mixfixRegistry = newMixfixFunctionRegistry()
+		l.mixfixRegistry = mixfixRegistry
+	}
 	env := NewEnvironment()
 	env.primitiveRegistry = registry
+	env.mixfixRegistry = mixfixRegistry
 	env.BaseDir = base
 	env.Loader = l
 	env.moduleExport = true

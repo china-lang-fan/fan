@@ -16,6 +16,10 @@ type Function struct {
 	Env          *Environment
 	Name         string
 	ReturnTypes  []ast.DeclType
+	NameSegments []string
+	Connectors   []string
+	GroupSizes   []int
+	Signature    string
 	TagInstances []object.Object
 	Impl         tagsys.Callable
 	MethodImpl   tagsys.Callable
@@ -56,11 +60,15 @@ func (r *returnSignal) Error() string {
 
 func evalFunctionLiteral(node *ast.FunctionLiteral, env *Environment) (object.Object, error) {
 	fn := &Function{
-		Params:      node.Params,
-		Body:        node.Body,
-		Env:         env,
-		Name:        node.Name,
-		ReturnTypes: node.ReturnTypes,
+		Params:       node.Params,
+		Body:         node.Body,
+		Env:          env,
+		Name:         node.Name,
+		ReturnTypes:  node.ReturnTypes,
+		NameSegments: node.NameSegments,
+		Connectors:   node.Connectors,
+		GroupSizes:   node.GroupSizes,
+		Signature:    node.Signature,
 	}
 	if err := processFunctionTags(fn, node.Tags, env); err != nil {
 		return nil, err

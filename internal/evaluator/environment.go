@@ -21,10 +21,15 @@ type Environment struct {
 	Loader            *Loader
 	moduleExport      bool
 	primitiveRegistry *primitiveMethodRegistry
+	mixfixRegistry    *mixfixFunctionRegistry
 }
 
 func NewEnvironment() *Environment {
-	return &Environment{store: map[string]*binding{}, primitiveRegistry: newPrimitiveMethodRegistry()}
+	return &Environment{
+		store:             map[string]*binding{},
+		primitiveRegistry: newPrimitiveMethodRegistry(),
+		mixfixRegistry:    newMixfixFunctionRegistry(),
+	}
 }
 
 func (e *Environment) SetBaseDir(dir string) {
@@ -39,6 +44,11 @@ func (e *Environment) SetLoader(l *Loader) {
 		} else {
 			e.primitiveRegistry = l.primitiveRegistry
 		}
+		if l.mixfixRegistry == nil {
+			l.mixfixRegistry = e.mixfixFunctions()
+		} else {
+			e.mixfixRegistry = l.mixfixRegistry
+		}
 	}
 }
 
@@ -49,7 +59,27 @@ func NewEnclosedEnvironment(outer *Environment) *Environment {
 		BaseDir:      outer.BaseDir,
 		Loader:       outer.Loader,
 		moduleExport: outer.moduleExport,
+		mixfixRegistry: func() *mixfixFunctionRegistry {
+			if outer.mixfixRegistry != nil {
+				return outer.mixfixRegistry
+			}
+			if outer.outer != nil {
+				return outer.outer.mixfixFunctions()
+			}
+			return newMixfixFunctionRegistry()
+		}(),
 	}
+}
+
+func (e *Environment) mixfixFunctions() *mixfixFunctionRegistry {
+	if e.mixfixRegistry != nil {
+		return e.mixfixRegistry
+	}
+	if e.outer != nil {
+		return e.outer.mixfixFunctions()
+	}
+	e.mixfixRegistry = newMixfixFunctionRegistry()
+	return e.mixfixRegistry
 }
 
 func (e *Environment) find(name string) (*binding, bool) {

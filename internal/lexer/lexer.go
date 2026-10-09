@@ -279,6 +279,18 @@ func (l *Lexer) readIdentifierOrKeyword() token.Token {
 		l.advance()
 	}
 	literal := string(l.src[start:l.pos])
+	if l.prevTok == token.RPAREN && l.pos < len(l.src) && strings.HasPrefix(literal, "的") && len([]rune(literal)) > 1 {
+		prefix := "的"
+		nextOffset := start + len([]rune(prefix))
+		for nextOffset < len(l.src) && (l.src[nextOffset] == ' ' || l.src[nextOffset] == '\t' || l.src[nextOffset] == '\n' ||
+			isIdentPart(l.src[nextOffset])) {
+			nextOffset++
+		}
+		if nextOffset < len(l.src) && l.src[nextOffset] == '(' {
+			l.pos = start + len([]rune(prefix))
+			return token.Token{Type: token.MEMBER, Literal: prefix, Line: l.line, Column: startCol}
+		}
+	}
 
 	if literal == "注释" {
 		next := rune(0)

@@ -101,6 +101,9 @@ func evalPrimitiveMethodDef(stmt *ast.MethodDef, env *Environment) (object.Objec
 }
 
 func evalImplicitReceiverCallExpr(node *ast.ImplicitReceiverCallExpr, env *Environment) (object.Object, error) {
+	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
+		return evalMixfixCall(chain, env, node.Position)
+	}
 	receiver, err := Eval(node.Receiver, env)
 	if err != nil {
 		return nil, err

@@ -13,12 +13,16 @@ type Parameter struct {
 }
 
 type FunctionLiteral struct {
-	Position    Position
-	Params      []Parameter
-	Body        *BlockStmt
-	Name        string
-	ReturnTypes []DeclType
-	Tags        []*TagExpr
+	Position     Position
+	Params       []Parameter
+	Body         *BlockStmt
+	Name         string
+	NameSegments []string
+	Connectors   []string
+	GroupSizes   []int
+	Signature    string
+	ReturnTypes  []DeclType
+	Tags         []*TagExpr
 }
 
 func (n *FunctionLiteral) Pos() Position   { return n.Position }
@@ -89,9 +93,10 @@ func (n *ReturnStmt) String() string {
 }
 
 type MemberExpr struct {
-	Position Position
-	Object   Expression
-	Name     string
+	Position  Position
+	Object    Expression
+	Name      string
+	Connector string
 }
 
 func (n *MemberExpr) Pos() Position   { return n.Position }
@@ -101,10 +106,11 @@ func (n *MemberExpr) String() string {
 }
 
 type ImplicitReceiverCallExpr struct {
-	Position Position
-	Receiver Expression
-	Name     string
-	Args     []Expression
+	Position  Position
+	Receiver  Expression
+	Name      string
+	Args      []Expression
+	Connector string
 }
 
 func (n *ImplicitReceiverCallExpr) Pos() Position   { return n.Position }
