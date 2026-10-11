@@ -305,6 +305,18 @@ func TestDeferAndThrow(t *testing.T) {
 	}
 }
 
+func TestReadablePrefixKeywords(t *testing.T) {
+	prog := mustParse(t, "变量 x = 从 通过 f(1)")
+	decl := prog.Statements[0].(*ast.VarDecl)
+	call, ok := decl.Value.(*ast.CallExpr)
+	if !ok {
+		t.Fatalf("协助关键字应透明解析为后续表达式，实际 %T", decl.Value)
+	}
+	if ident, ok := call.Callee.(*ast.Identifier); !ok || ident.Name != "f" {
+		t.Fatalf("协助关键字后的调用解析错误：%T", call.Callee)
+	}
+}
+
 func TestErrorType(t *testing.T) {
 	src := "函数 f() -> 错误\n    返回 空\n结束"
 	prog := mustParse(t, src)

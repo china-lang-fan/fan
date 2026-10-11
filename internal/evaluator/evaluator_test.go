@@ -216,6 +216,12 @@ func TestUndeclared(t *testing.T) {
 	mustError(t, "未定义 + 1", "未声明")
 }
 
+func TestReadablePrefixKeywords(t *testing.T) {
+	mustInt(t, "从 长度([1, 2, 3])", 3)
+	mustInt(t, "变量 数据 = [1, 2]\n通过 长度(数据)", 2)
+	mustInt(t, "变量 数据 = [7, 8]\n从 数据[0]", 7)
+}
+
 func TestShortCircuit(t *testing.T) {
 	mustBool(t, "假 且 (1 除 0 大于 0)", false)
 	mustBool(t, "真 或 (1 除 0 大于 0)", true)

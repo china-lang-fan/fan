@@ -959,7 +959,13 @@ func (p *Parser) parsePrefix() ast.Expression {
 		node := &ast.NilLiteral{Position: pos}
 		p.next()
 		return node
+	case token.CHECK:
+		return p.parseCheckExpression()
 	case token.IDENT, token.SELF:
+		if p.isReadabilityPrefix() {
+			p.next()
+			return p.parseExpression(LOWEST)
+		}
 		node := &ast.Identifier{Position: pos, Name: p.cur.Literal}
 		p.next()
 		return node
@@ -967,8 +973,6 @@ func (p *Parser) parsePrefix() ast.Expression {
 		node := &ast.Identifier{Position: pos, Name: "错误"}
 		p.next()
 		return node
-	case token.CHECK:
-		return p.parseCheckExpression()
 	case token.INC:
 		p.next()
 		implicit := p.implicitCallOK
@@ -1305,6 +1309,24 @@ func exportedName(stmt ast.Statement) string {
 		return n.MethodName
 	}
 	return ""
+}
+
+func (p *Parser) isReadabilityPrefix() bool {
+	if p.cur.Type != token.IDENT || (p.cur.Literal != "通过" && p.cur.Literal != "从") {
+		return false
+	}
+	if p.peek.Type == token.LPAREN || p.peek.Type == token.ASSIGN || p.peek.Type == token.COMMA ||
+		p.peek.Type == token.NEWLINE || p.peek.Type == token.EOF || p.peek.Type == token.RPAREN ||
+		p.peek.Type == token.RBRACK || p.peek.Type == token.LBRACK {
+		return false
+	}
+	switch p.peek.Type {
+	case token.IDENT, token.SELF, token.INT, token.FLOAT, token.STRING,
+		token.TRUE, token.FALSE, token.NIL, token.LBRACE, token.MINUS,
+		token.NOT, token.FUNCTION, token.MEMBER, token.DOT:
+		return true
+	}
+	return false
 }
 
 func (p *Parser) parseCheckExpression() ast.Expression {
