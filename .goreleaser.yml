@@ -37,6 +37,7 @@ archives:
       - LICENSE
       - README.md
       - docs/**
+      - sdk/**
 
 checksum:
   name_template: checksums.txt
@@ -59,6 +60,8 @@ nfpms:
         dst: /usr/share/doc/fan/LICENSE
       - src: README.md
         dst: /usr/share/doc/fan/README.md
+      - src: sdk
+        dst: /usr/share/fan/sdk
 
 snapshot:
   version_template: "{{ incpatch .Version }}-dev"

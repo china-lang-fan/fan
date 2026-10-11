@@ -164,3 +164,20 @@ func TestModuleLegacyExtensionStillSupported(t *testing.T) {
 		t.Fatalf("模块内容错误：%s", mod.Exports["名"].Inspect())
 	}
 }
+
+func TestModuleResolvesFromConfiguredSdkDir(t *testing.T) {
+	base := t.TempDir()
+	sdkDir := t.TempDir()
+	path := filepath.Join(sdkDir, "基础.凡")
+	if err := os.WriteFile(path, []byte("导出 变量 版本 = 1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	loader := NewLoader(sdkDir)
+	mod, err := loader.Load(base, "基础")
+	if err != nil {
+		t.Fatalf("应从 SDK 目录加载：%v", err)
+	}
+	if mod.Exports["版本"].Inspect() != "1" {
+		t.Fatalf("SDK 模块内容错误：%s", mod.Exports["版本"].Inspect())
+	}
+}

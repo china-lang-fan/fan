@@ -14,17 +14,44 @@ import (
 type Loader struct {
 	cache             map[string]*object.Module
 	loading           map[string]bool
-	modulesDir        string
+	modulesDirs       []string
 	primitiveRegistry *primitiveMethodRegistry
 	mixfixRegistry    *mixfixFunctionRegistry
 }
 
 func NewLoader(modulesDir string) *Loader {
 	return &Loader{
-		cache:      map[string]*object.Module{},
-		loading:    map[string]bool{},
-		modulesDir: modulesDir,
+		cache:       map[string]*object.Module{},
+		loading:     map[string]bool{},
+		modulesDirs: defaultModulesDirs(modulesDir),
 	}
+}
+
+func defaultModulesDirs(base string) []string {
+	var dirs []string
+	seen := map[string]bool{}
+	add := func(dir string) {
+		if dir == "" {
+			return
+		}
+		abs, err := filepath.Abs(dir)
+		if err != nil || seen[abs] {
+			return
+		}
+		seen[abs] = true
+		dirs = append(dirs, abs)
+	}
+	add(base)
+	if executable, err := os.Executable(); err == nil {
+		executableDir := filepath.Dir(executable)
+		add(executableDir)
+		add(filepath.Join(executableDir, "sdk"))
+		add(filepath.Join(executableDir, "..", "share", "fan", "sdk"))
+		add(filepath.Join(executableDir, "..", "..", "share", "fan", "sdk"))
+	}
+	add("/usr/local/share/fan/sdk")
+	add("/usr/share/fan/sdk")
+	return dirs
 }
 
 func hasFanExtension(path string) bool {
@@ -52,43 +79,28 @@ func firstExistingPath(paths ...string) (string, bool) {
 }
 
 func (l *Loader) resolvePath(base string, path string) (string, error) {
-	if hasFanExtension(path) {
-		if filepath.IsAbs(path) {
-			if abs, ok := existingPath(path); ok {
-				return abs, nil
-			}
-		} else if base != "" {
-			if abs, ok := firstExistingPath(filepath.Join(base, path), path); ok {
-				return abs, nil
-			}
-		} else if abs, ok := existingPath(path); ok {
-			return abs, nil
-		}
-	} else if filepath.IsAbs(path) {
-		if abs, ok := firstExistingPath(path+".凡", path+".fan"); ok {
+	candidates := []string{path}
+	if !hasFanExtension(path) {
+		candidates = []string{path + ".凡", path + ".fan"}
+	}
+	if filepath.IsAbs(path) {
+		if abs, ok := firstExistingPath(candidates...); ok {
 			return abs, nil
 		}
 	} else {
-		candidates := []string{path + ".凡", path + ".fan"}
+		search := make([]string, 0, 2+len(l.modulesDirs))
 		if base != "" {
-			baseCandidates := make([]string, 0, 4)
 			for _, candidate := range candidates {
-				baseCandidates = append(baseCandidates, filepath.Join(base, candidate))
-			}
-			if abs, ok := firstExistingPath(baseCandidates...); ok {
-				return abs, nil
+				search = append(search, filepath.Join(base, candidate))
 			}
 		}
-		if l.modulesDir != "" {
-			moduleCandidates := make([]string, 0, 2)
+		for _, modulesDir := range l.modulesDirs {
 			for _, candidate := range candidates {
-				moduleCandidates = append(moduleCandidates, filepath.Join(l.modulesDir, candidate))
-			}
-			if abs, ok := firstExistingPath(moduleCandidates...); ok {
-				return abs, nil
+				search = append(search, filepath.Join(modulesDir, candidate))
 			}
 		}
-		if abs, ok := firstExistingPath(candidates...); ok {
+		search = append(search, candidates...)
+		if abs, ok := firstExistingPath(search...); ok {
 			return abs, nil
 		}
 	}
