@@ -288,18 +288,18 @@ func TestErrorReturnAndCheck(t *testing.T) {
 		`    结束`,
 		`    返回 a / b、空`,
 		`结束`,
-		`尝试`,
-		`    变量 r = 检查 除法(10, 0)`,
-		`捕获 e`,
-		`    返回 e.消息`,
+		`函数 安全除法() -> (整数，错误)`,
+		`    返回 检查 除法(10, 0)`,
 		`结束`,
+		`变量 r、e = 安全除法()`,
+		`e.消息`,
 	}, "\n")
 	res, err := runSource(t, src)
 	if err != nil {
 		t.Fatalf("运行错误：%v", err)
 	}
 	if res.Inspect() != "零" {
-		t.Fatalf("应捕获错误，实际 %s", res.Inspect())
+		t.Fatalf("应返回错误，实际 %s", res.Inspect())
 	}
 }
 

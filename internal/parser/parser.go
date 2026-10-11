@@ -160,8 +160,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseRepeatStatement()
 	case p.cur.Type == token.FORIN:
 		return p.parseForEachStatement()
-	case p.cur.Type == token.TRY:
-		return p.parseTryStatement()
+	case p.cur.Type == token.DEFER:
+		return p.parseDeferStatement()
+	case p.cur.Type == token.THROW:
+		return p.parseThrowStatement()
 	case p.cur.Type == token.IMPORT:
 		return p.parseImportStatement()
 	case p.cur.Type == token.EXPORT:
@@ -1317,63 +1319,36 @@ func (p *Parser) parseCheckExpression() ast.Expression {
 	return &ast.CheckExpr{Position: pos, Call: call}
 }
 
-func (p *Parser) parseTryStatement() ast.Statement {
+func (p *Parser) parseDeferStatement() ast.Statement {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
-	if p.cur.Type != token.TRY {
-		p.addError(p.cur, "尝试 语句应以 尝试 开头")
-		return nil
-	}
-	if p.peek.Type != token.NEWLINE && p.peek.Type != token.EOF {
-		p.addError(p.peek, "尝试 后应换行")
-		return nil
-	}
 	p.next()
-	p.skipStatementEnd()
-	body := &ast.BlockStmt{Position: pos}
-	for {
-		if p.cur.Type == token.CATCH {
-			break
-		}
-		if p.cur.Type == token.END || p.cur.Type == token.EOF {
-			p.addError(p.cur, "尝试 语句缺少 捕获")
-			return nil
-		}
-		stmt := p.parseStatement()
-		if stmt == nil {
-			return nil
-		}
-		body.Statements = append(body.Statements, stmt)
-		p.skipStatementEnd()
+	expr := p.parseExpression(LOWEST)
+	if expr == nil {
+		p.addError(p.cur, "稍后 后需要函数调用或无参函数")
+		return nil
 	}
+	switch expr.(type) {
+	case *ast.CallExpr, *ast.FunctionLiteral:
+		return &ast.DeferStmt{Position: pos, Call: expr}
+	default:
+		p.addError(p.cur, "稍后 后必须是函数调用或无参函数")
+		return nil
+	}
+}
 
+func (p *Parser) parseThrowStatement() ast.Statement {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
 	p.next()
-	catchName := "错误"
-	if p.cur.Type == token.IDENT {
-		catchName = p.cur.Literal
-		p.next()
-	}
-	if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF {
-		p.addError(p.cur, "捕获 后应换行")
+	if p.cur.Type == token.NEWLINE || p.cur.Type == token.EOF {
+		p.addError(p.cur, "抛出 后需要一个值")
 		return nil
 	}
-	p.skipStatementEnd()
-	catch := &ast.BlockStmt{Position: pos}
-	for {
-		if p.cur.Type == token.END {
-			p.next()
-			return &ast.TryStmt{Position: pos, Body: body, CatchName: catchName, Catch: catch}
-		}
-		if p.cur.Type == token.EOF {
-			p.addError(p.cur, "尝试 语句缺少 结束")
-			return nil
-		}
-		stmt := p.parseStatement()
-		if stmt == nil {
-			return nil
-		}
-		catch.Statements = append(catch.Statements, stmt)
-		p.skipStatementEnd()
+	value := p.parseExpression(LOWEST)
+	if value == nil {
+		p.addError(p.cur, "抛出 后需要一个值")
+		return nil
 	}
+	return &ast.ThrowStmt{Position: pos, Value: value}
 }
 
 func (p *Parser) parseMember(left ast.Expression) ast.Expression {

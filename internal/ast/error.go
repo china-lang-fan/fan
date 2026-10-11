@@ -13,19 +13,24 @@ func (n *CheckExpr) String() string {
 	return fmt.Sprintf("检查 %s", n.Call.String())
 }
 
-type TryStmt struct {
-	Position  Position
-	Body      *BlockStmt
-	CatchName string
-	Catch     *BlockStmt
+type DeferStmt struct {
+	Position Position
+	Call     Expression
 }
 
-func (n *TryStmt) Pos() Position  { return n.Position }
-func (n *TryStmt) statementNode() {}
-func (n *TryStmt) String() string {
-	name := n.CatchName
-	if name == "" {
-		name = "_"
-	}
-	return fmt.Sprintf("尝试 { %s } 捕获 %s { %s } 结束", n.Body.String(), name, n.Catch.String())
+func (n *DeferStmt) Pos() Position  { return n.Position }
+func (n *DeferStmt) statementNode() {}
+func (n *DeferStmt) String() string {
+	return fmt.Sprintf("稍后 %s", n.Call.String())
+}
+
+type ThrowStmt struct {
+	Position Position
+	Value    Expression
+}
+
+func (n *ThrowStmt) Pos() Position  { return n.Position }
+func (n *ThrowStmt) statementNode() {}
+func (n *ThrowStmt) String() string {
+	return fmt.Sprintf("抛出 %s", n.Value.String())
 }

@@ -171,6 +171,10 @@ func callImpl(impl tagsys.Callable, args []tagsys.Object, pos ast.Position, retu
 }
 
 func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object.Object, error) {
+	return applyFunctionWithPanic(fn, args, pos, nil)
+}
+
+func applyFunctionWithPanic(fn *Function, args []object.Object, pos ast.Position, inherited *panicSignal) (object.Object, error) {
 	values, err := bindArguments(fn, args, pos)
 	if err != nil {
 		return nil, err
@@ -194,6 +198,13 @@ func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object
 		}
 		return callImpl(fn.MethodImpl, callArgs, pos, fn.ReturnTypes)
 	}
+	frame := pushFrame()
+	frame.panic = inherited
+	defer popFrame()
+	return applyFunctionBodyWithFrame(fn, values, pos, frame)
+}
+
+func applyFunctionBodyWithFrame(fn *Function, values []object.Object, pos ast.Position, frame *callFrame) (object.Object, error) {
 	env := NewEnclosedEnvironment(fn.Env)
 	for i, param := range fn.Params {
 		if param.Variadic {
@@ -219,8 +230,30 @@ func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object
 			if err != nil {
 				return nil, err
 			}
-			return coerceReturnValues(pos, fn.ReturnTypes, resultValues)
+			coerced, coerceErr := coerceReturnValues(pos, fn.ReturnTypes, resultValues)
+			if coerceErr != nil {
+				return nil, coerceErr
+			}
+			deferErr := runDefers(frame)
+			if deferErr != nil {
+				return nil, deferErr
+			}
+			return coerced, nil
+		} else if panicErr, ok := err.(*panicSignal); ok {
+			frame.panic = panicErr
+			deferErr := runDefers(frame)
+			if deferErr != nil {
+				return nil, deferErr
+			}
+			if frame.panic == nil {
+				return zeroFunctionResult(fn, pos)
+			}
+			return nil, frame.panic
 		} else {
+			deferErr := runDefers(frame)
+			if deferErr != nil {
+				return nil, deferErr
+			}
 			return nil, err
 		}
 	} else {
@@ -229,7 +262,28 @@ func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object
 		}
 		resultValues = []object.Object{result}
 	}
-	return coerceReturnValues(pos, fn.ReturnTypes, resultValues)
+	coerced, coerceErr := coerceReturnValues(pos, fn.ReturnTypes, resultValues)
+	if coerceErr != nil {
+		return nil, coerceErr
+	}
+	if deferErr := runDefers(frame); deferErr != nil {
+		if frame.panic == nil {
+			return nil, deferErr
+		}
+		return nil, frame.panic
+	}
+	return coerced, nil
+}
+
+func zeroFunctionResult(fn *Function, pos ast.Position) (object.Object, error) {
+	if len(fn.ReturnTypes) == 0 {
+		return object.Null, nil
+	}
+	values := make([]object.Object, len(fn.ReturnTypes))
+	for i, dt := range fn.ReturnTypes {
+		values[i] = zeroValueForType(dt)
+	}
+	return coerceReturnValues(pos, fn.ReturnTypes, values)
 }
 
 func (f *Function) checkReturn(cause *object.Error) ([]object.Object, error) {

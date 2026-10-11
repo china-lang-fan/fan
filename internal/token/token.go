@@ -88,8 +88,8 @@ const (
 	RETURN   Type = "RETURN"
 	IMPORT   Type = "IMPORT"
 	EXPORT   Type = "EXPORT"
-	TRY      Type = "TRY"
-	CATCH    Type = "CATCH"
+	DEFER    Type = "DEFER"
+	THROW    Type = "THROW"
 	CHECK    Type = "CHECK"
 	MEMBER   Type = "MEMBER"
 	CLASS    Type = "CLASS"
@@ -160,8 +160,8 @@ var keywords = map[string]Type{
 	"返回":   RETURN,
 	"导入":   IMPORT,
 	"导出":   EXPORT,
-	"尝试":   TRY,
-	"捕获":   CATCH,
+	"稍后":   DEFER,
+	"抛出":   THROW,
 	"检查":   CHECK,
 	"的":    MEMBER,
 	"方法":   METHOD,

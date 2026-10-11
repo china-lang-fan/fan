@@ -72,8 +72,10 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return evalTimesStmt(n, env)
 	case *ast.ForEachStmt:
 		return evalForEachStmt(n, env)
-	case *ast.TryStmt:
-		return evalTryStmt(n, env)
+	case *ast.DeferStmt:
+		return evalDeferStmt(n, env)
+	case *ast.ThrowStmt:
+		return evalThrowStmt(n, env)
 	case *ast.CheckExpr:
 		return evalCheckExpr(n, env)
 	case *ast.BreakStmt:
@@ -107,6 +109,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 }
 
 func evalProgram(prog *ast.Program, env *Environment) (object.Object, error) {
+	frame := pushFrame()
+	defer popFrame()
 	var last object.Object
 	for _, stmt := range prog.Statements {
 		res, err := Eval(stmt, env)
@@ -120,10 +124,28 @@ func evalProgram(prog *ast.Program, env *Environment) (object.Object, error) {
 				}
 				return &object.Tuple{Values: ret.values}, nil
 			}
+			if panicErr, ok := err.(*panicSignal); ok {
+				frame.panic = panicErr
+				deferErr := runDefers(frame)
+				if deferErr != nil {
+					return nil, deferErr
+				}
+				if frame.panic == nil {
+					return object.Null, nil
+				}
+				return nil, frame.panic
+			}
+			deferErr := runDefers(frame)
+			if deferErr != nil {
+				return nil, deferErr
+			}
 			pos := stmt.Pos()
 			return nil, &EvalError{Pos: pos, Reason: err.Error()}
 		}
 		last = res
+	}
+	if err := runDefers(frame); err != nil {
+		return nil, err
 	}
 	return last, nil
 }
@@ -622,6 +644,9 @@ func evalReturnStmt(node *ast.ReturnStmt, env *Environment) (object.Object, erro
 }
 
 func evalCallExprDispatch(node *ast.CallExpr, env *Environment) (object.Object, error) {
+	if ident, ok := node.Callee.(*ast.Identifier); ok && ident.Name == "捕获" && len(node.Args) == 0 {
+		return evalRecover(), nil
+	}
 	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
 		return evalMixfixCall(chain, env, node.Position)
 	}

@@ -55,36 +55,6 @@ func stripErrorTail(val object.Object) object.Object {
 	return val
 }
 
-func evalTryStmt(stmt *ast.TryStmt, env *Environment) (object.Object, error) {
-	tryEnv := NewEnclosedEnvironment(env)
-	res, err := evalBlock(stmt.Body, tryEnv)
-	if err == nil {
-		return res, nil
-	}
-	if sig, ok := err.(*checkSignal); ok {
-		return evalCatch(stmt, env, sig.err)
-	}
-	if e, ok := err.(*object.Error); ok {
-		return evalCatch(stmt, env, e)
-	}
-	return nil, err
-}
-
-func evalCatch(stmt *ast.TryStmt, env *Environment, errObj *object.Error) (object.Object, error) {
-	if stmt.Catch == nil {
-		return object.Null, nil
-	}
-	catchEnv := NewEnclosedEnvironment(env)
-	name := stmt.CatchName
-	if name == "" {
-		name = "错误"
-	}
-	if err := catchEnv.declare(name, errObj, false, ast.TypeAny); err != nil {
-		return nil, &EvalError{Pos: stmt.Position, Reason: err.Error()}
-	}
-	return evalBlock(stmt.Catch, catchEnv)
-}
-
 func unwrapCheckSignal(err error) (*object.Error, bool) {
 	if sig, ok := err.(*checkSignal); ok {
 		return sig.err, true
@@ -104,6 +74,8 @@ func zeroValueForType(dt ast.DeclType) object.Object {
 		return object.False
 	case ast.TypeArray:
 		return &object.Array{}
+	case ast.TypeDict:
+		return &object.Dict{}
 	case ast.TypeError:
 		return object.Null
 	}

@@ -286,15 +286,22 @@ func TestCheckExpression(t *testing.T) {
 	}
 }
 
-func TestTryCatch(t *testing.T) {
-	src := "尝试\n    打印(1)\n捕获 e\n    打印(e)\n结束"
+func TestDeferAndThrow(t *testing.T) {
+	src := "稍后 清理(1)\n抛出 \"失败\""
 	prog := mustParse(t, src)
-	try, ok := prog.Statements[0].(*ast.TryStmt)
+	deferStmt, ok := prog.Statements[0].(*ast.DeferStmt)
 	if !ok {
-		t.Fatalf("应为尝试语句，实际 %T", prog.Statements[0])
+		t.Fatalf("应为稍后语句，实际 %T", prog.Statements[0])
 	}
-	if try.CatchName != "e" || try.Catch == nil {
-		t.Fatalf("捕获解析错误：%+v", try)
+	if _, ok := deferStmt.Call.(*ast.CallExpr); !ok {
+		t.Fatalf("稍后调用解析错误：%T", deferStmt.Call)
+	}
+	throwStmt, ok := prog.Statements[1].(*ast.ThrowStmt)
+	if !ok {
+		t.Fatalf("应为抛出语句，实际 %T", prog.Statements[1])
+	}
+	if throwStmt.Value == nil {
+		t.Fatal("抛出值不能为空")
 	}
 }
 
