@@ -29,6 +29,7 @@ type document struct {
 	uri     string
 	version int
 	text    string
+	index   *analysis.Index
 }
 
 // NewServer 创建一个从 in 读请求、向 out 写响应的 LSP 服务器。
@@ -112,7 +113,10 @@ func (s *Server) handle(msg jsonrpcMessage) {
 			ID: msg.ID,
 			Result: initializeResult{
 				Capabilities: serverCapabilities{
-					TextDocumentSync: textDocumentSyncOptions{OpenClose: true, Change: 1},
+					TextDocumentSync:   textDocumentSyncOptions{OpenClose: true, Change: 1},
+					DefinitionProvider: true,
+					HoverProvider:      true,
+					CompletionProvider: &completionOptions{TriggerCharacters: []string{".", "的"}},
 				},
 				ServerInfo: map[string]string{"name": "fan-lsp", "version": "0.1.0"},
 			},
@@ -151,6 +155,21 @@ func (s *Server) handle(msg jsonrpcMessage) {
 				}),
 			})
 		}
+	case "textDocument/hover":
+		var params textDocumentPositionParams
+		if json.Unmarshal(msg.Params, &params) == nil {
+			s.respondHover(msg.ID, params)
+		}
+	case "textDocument/definition":
+		var params textDocumentPositionParams
+		if json.Unmarshal(msg.Params, &params) == nil {
+			s.respondDefinition(msg.ID, params)
+		}
+	case "textDocument/completion":
+		var params completionParams
+		if json.Unmarshal(msg.Params, &params) == nil {
+			s.respondCompletion(msg.ID, params)
+		}
 	default:
 		if msg.ID != nil {
 			_ = s.writeMessage(jsonrpcMessage{
@@ -169,7 +188,10 @@ func mustMarshal(value any) json.RawMessage {
 func (s *Server) setDocument(uri string, version int, text string) {
 	s.docsMu.Lock()
 	defer s.docsMu.Unlock()
-	s.docs[uri] = &document{uri: uri, version: version, text: text}
+	s.docs[uri] = &document{
+		uri: uri, version: version, text: text,
+		index: analysis.BuildIndex(uri, text),
+	}
 }
 
 func (s *Server) removeDocument(uri string) {
@@ -196,11 +218,18 @@ func (s *Server) publish(uri string, version int) {
 	doc, ok := s.docs[uri]
 	if ok {
 		text := doc.text
+		index := doc.index
 		if version == 0 {
 			version = doc.version
 		}
 		s.docsMu.Unlock()
-		diagnostics := toLSPDiagnostics(text, analysis.Analyze(text))
+		var rawDiags []analysis.Diagnostic
+		if index != nil {
+			rawDiags = analysis.AnalyzeIndex(index)
+		} else {
+			rawDiags = analysis.Analyze(text)
+		}
+		diagnostics := toLSPDiagnostics(text, rawDiags)
 		var versionPtr *int
 		if version != 0 {
 			v := version

@@ -34,6 +34,13 @@ type Diagnostic struct {
 
 // Analyze 对一份源码做静态分析。
 func Analyze(source string) []Diagnostic {
+	index := BuildIndex("", source)
+	return AnalyzeIndex(index)
+}
+
+// AnalyzeIndex 基于跨文件索引做完整诊断，供 LSP 使用（含真实文件 URI）。
+func AnalyzeIndex(index *Index) []Diagnostic {
+	source := index.root.Source
 	prog, errs := parser.ParseProgram(source)
 	var diags []Diagnostic
 	for _, e := range errs {
@@ -52,6 +59,8 @@ func Analyze(source string) []Diagnostic {
 	}
 	registry := collectMixfixDefs(prog)
 	diags = append(diags, checkMixfixSpacing(prog, registry)...)
+	diags = append(diags, index.root.checkImports(index)...)
+	diags = append(diags, index.root.checkUndefinedNames(index)...)
 	return diags
 }
 

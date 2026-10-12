@@ -86,8 +86,65 @@ type textDocumentSyncOptions struct {
 
 type serverCapabilities struct {
 	TextDocumentSync   textDocumentSyncOptions `json:"textDocumentSync"`
+	DefinitionProvider bool                    `json:"definitionProvider"`
+	HoverProvider      bool                    `json:"hoverProvider"`
+	CompletionProvider *completionOptions      `json:"completionProvider,omitempty"`
 	DiagnosticProvider map[string]any          `json:"diagnosticProvider,omitempty"`
 }
+
+type completionOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters"`
+}
+
+type textDocumentPositionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+type markupContent struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+type hover struct {
+	Contents markupContent `json:"contents"`
+	Range    *Range        `json:"range,omitempty"`
+}
+
+type lspLocation struct {
+	URI   string `json:"uri"`
+	Range Range  `json:"range"`
+}
+
+type completionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+type completionItem struct {
+	Label  string         `json:"label"`
+	Kind   int            `json:"kind"`
+	Detail string         `json:"detail,omitempty"`
+	Doc    *markupContent `json:"documentation,omitempty"`
+}
+
+type completionList struct {
+	IsIncomplete bool             `json:"isIncomplete"`
+	Items        []completionItem `json:"items"`
+}
+
+const (
+	completionKindText      = 1
+	completionKindFunction  = 3
+	completionKindVariable  = 6
+	completionKindField     = 5
+	completionKindMethod    = 2
+	completionKindClass     = 7
+	completionKindConstant  = 21
+	completionKindParameter = 14
+	completionKindModule    = 9
+	completionKindKeyword   = 14
+)
 
 type initializeResult struct {
 	Capabilities serverCapabilities `json:"capabilities"`

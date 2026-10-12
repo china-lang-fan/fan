@@ -1,6 +1,9 @@
 package analysis
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func findCode(diags []Diagnostic, code string) *Diagnostic {
 	for i := range diags {
@@ -106,6 +109,80 @@ func TestNoWarningForPlainMemberAccess(t *testing.T) {
 		if d.Code == "mixfix-space" {
 			t.Fatalf("普通成员访问不应告警：%#v", d)
 		}
+	}
+}
+
+func TestUndefinedNameDiagnostic(t *testing.T) {
+	src := `函数 测试(x 字符串)
+    变量 y = 不存在的名字
+    返回 y
+结束
+`
+	d := findCode(Analyze(src), "undefined-name")
+	if d == nil {
+		t.Fatal("期望未定义名字告警")
+	}
+	if !strings.Contains(d.Message, "不存在的名字") {
+		t.Fatalf("告警内容错误：%s", d.Message)
+	}
+}
+
+func TestDefinedNameNoDiagnostic(t *testing.T) {
+	src := `模型 结果
+    变量 字符串 标签
+结束
+
+函数 测试()
+    变量 r = 结果()
+    r.标签 = "x"
+    返回 r.标签
+结束
+`
+	for _, d := range Analyze(src) {
+		if d.Code == "undefined-name" {
+			t.Fatalf("已定义名字不应告警：%s", d.Message)
+		}
+	}
+}
+
+func TestImportNotFoundDiagnostic(t *testing.T) {
+	src := `导入 "肯定不存在的模块_xyz" 作为 模块
+`
+	d := findCode(Analyze(src), "import-not-found")
+	if d == nil {
+		t.Fatal("期望导入失败告警")
+	}
+}
+
+func TestDocCommentExtraction(t *testing.T) {
+	src := `# 修改用户状态
+# 第二行说明
+函数 修改(值 字符串)的状态为无效
+    返回 值
+结束
+
+变量 x = 1
+`
+	doc := ParseDocument("file:///t.凡", src)
+	syms := doc.byName["修改的状态为无效"]
+	if len(syms) != 1 {
+		t.Fatalf("应收集到函数符号：%v", doc.byName)
+	}
+	if syms[0].Doc != "修改用户状态\n第二行说明" {
+		t.Fatalf("文档注释错误：%q", syms[0].Doc)
+	}
+}
+
+func TestDocCommentBlankLineCuts(t *testing.T) {
+	src := `# 上一段说明
+
+函数 测试
+    返回 1
+结束
+`
+	doc := ParseDocument("file:///t.凡", src)
+	if syms := doc.byName["测试"]; len(syms) == 1 && syms[0].Doc != "" {
+		t.Fatalf("空行应切断文档注释，实际：%q", syms[0].Doc)
 	}
 }
 
