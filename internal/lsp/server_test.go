@@ -4,12 +4,37 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-type frames struct {
-	messages []jsonrpcMessage
+// safeBuffer 是带锁的输出缓冲，供测试在服务器写入时安全读取。
+type safeBuffer struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	cond chan struct{}
+}
+
+func newSafeBuffer() *safeBuffer {
+	return &safeBuffer{cond: make(chan struct{}, 256)}
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	n, err := b.buf.Write(p)
+	b.mu.Unlock()
+	select {
+	case b.cond <- struct{}{}:
+	default:
+	}
+	return n, err
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func frame(method string, id any, params any) string {
@@ -58,6 +83,9 @@ func readFrames(t *testing.T, data string) []jsonrpcMessage {
 				}
 			}
 		}
+		if idx+4+length > len(rest) {
+			break
+		}
 		body := rest[idx+4 : idx+4+length]
 		var msg jsonrpcMessage
 		if err := json.Unmarshal([]byte(body), &msg); err != nil {
@@ -72,25 +100,25 @@ func readFrames(t *testing.T, data string) []jsonrpcMessage {
 func TestLSPInitializeAndDiagnostics(t *testing.T) {
 	source := "函数 修改(值 字符串)的状态为无效\n    返回 值\n结束\n\n修改(\"x\") 的状态为无效\n"
 	var input bytes.Buffer
-	initParams := map[string]any{
+	input.WriteString(frame("initialize", 1, map[string]any{
 		"processId":    1,
 		"rootUri":      nil,
 		"capabilities": map[string]any{},
-	}
-	input.WriteString(frame("initialize", 1, initParams))
+	}))
 	input.WriteString(frame("initialized", nil, map[string]any{}))
 	input.WriteString(frame("textDocument/didOpen", nil, map[string]any{
 		"textDocument": map[string]any{
 			"uri": "file:///test.凡", "languageId": "fan", "version": 1, "text": source,
 		},
 	}))
+	input.WriteString(frame("exit", nil, nil))
 
-	var output bytes.Buffer
-	server := NewServer(&input, &output)
+	output := newSafeBuffer()
+	server := NewServer(&input, output)
 	done := make(chan error, 1)
 	go func() { done <- server.Run() }()
 
-	var messages []jsonrpcMessage
+	// didOpen 同步推送诊断，收到输出即说明已处理；再发 exit 让服务器干净退出。
 	deadline := time.After(2 * time.Second)
 	for {
 		if strings.Contains(output.String(), "mixfix-space") {
@@ -99,18 +127,19 @@ func TestLSPInitializeAndDiagnostics(t *testing.T) {
 		select {
 		case <-deadline:
 			t.Fatalf("等待诊断超时，输出：%s", output.String())
-		default:
-			time.Sleep(10 * time.Millisecond)
+		case <-time.After(5 * time.Millisecond):
 		}
 	}
-	messages = readFrames(t, output.String())
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("服务器异常：%v", err)
 		}
-	default:
+	case <-time.After(2 * time.Second):
+		t.Fatal("服务器未在 exit 后退出")
 	}
+
+	messages := readFrames(t, output.String())
 	foundInit := false
 	foundDiag := false
 	for _, msg := range messages {

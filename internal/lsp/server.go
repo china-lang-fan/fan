@@ -43,6 +43,7 @@ func NewServer(in io.Reader, out io.Writer) *Server {
 
 // Run 处理连接直到收到 exit 请求或输入结束。
 func (s *Server) Run() error {
+	defer close(s.stop)
 	for {
 		msg, err := s.readMessage()
 		if err != nil {
