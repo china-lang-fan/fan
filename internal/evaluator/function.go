@@ -77,6 +77,9 @@ func evalFunctionLiteral(node *ast.FunctionLiteral, env *Environment) (object.Ob
 }
 
 func evalMemberExpression(node *ast.MemberExpr, env *Environment) (object.Object, error) {
+	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
+		return evalMixfixCall(chain, env, node.Position)
+	}
 	obj, err := Eval(node.Object, env)
 	if err != nil {
 		return nil, err

@@ -10,11 +10,12 @@ import (
 )
 
 type Lexer struct {
-	src     []rune
-	pos     int
-	line    int
-	col     int
-	prevTok token.Type
+	src         []rune
+	pos         int
+	line        int
+	col         int
+	prevTok     token.Type
+	spaceBefore bool
 }
 
 func New(source string) *Lexer {
@@ -28,7 +29,7 @@ func New(source string) *Lexer {
 }
 
 func (l *Lexer) NextToken() token.Token {
-	l.skipSpaces()
+	l.spaceBefore = l.skipSpaces()
 	if l.pos >= len(l.src) {
 		return l.emit(token.EOF, "")
 	}
@@ -157,15 +158,18 @@ func (l *Lexer) NextToken() token.Token {
 	return tok
 }
 
-func (l *Lexer) skipSpaces() {
+func (l *Lexer) skipSpaces() bool {
+	saw := false
 	for l.pos < len(l.src) {
 		r := l.src[l.pos]
 		if r == ' ' || r == '\t' || r == '\r' {
 			l.advance()
+			saw = true
 			continue
 		}
 		break
 	}
+	return saw
 }
 
 func (l *Lexer) consumeLineComment() {
@@ -190,7 +194,7 @@ func (l *Lexer) peek(offset int) rune {
 }
 
 func (l *Lexer) emit(t token.Type, literal string) token.Token {
-	tok := token.Token{Type: t, Literal: literal, Line: l.line, Column: l.col}
+	tok := token.Token{Type: t, Literal: literal, Line: l.line, Column: l.col, LeadingSpace: l.spaceBefore}
 	if t != token.EOF {
 		l.prevTok = t
 	}
@@ -279,17 +283,9 @@ func (l *Lexer) readIdentifierOrKeyword() token.Token {
 		l.advance()
 	}
 	literal := string(l.src[start:l.pos])
-	if l.prevTok == token.RPAREN && l.pos < len(l.src) && strings.HasPrefix(literal, "的") && len([]rune(literal)) > 1 {
-		prefix := "的"
-		nextOffset := start + len([]rune(prefix))
-		for nextOffset < len(l.src) && (l.src[nextOffset] == ' ' || l.src[nextOffset] == '\t' || l.src[nextOffset] == '\n' ||
-			isIdentPart(l.src[nextOffset])) {
-			nextOffset++
-		}
-		if nextOffset < len(l.src) && l.src[nextOffset] == '(' {
-			l.pos = start + len([]rune(prefix))
-			return token.Token{Type: token.MEMBER, Literal: prefix, Line: l.line, Column: startCol}
-		}
+	if l.prevTok == token.RPAREN && strings.HasPrefix(literal, "的") &&
+		len([]rune(literal)) > 1 {
+		return l.splitMemberAfterParen(start, startCol, !l.spaceBefore)
 	}
 
 	if literal == "注释" {
@@ -304,9 +300,20 @@ func (l *Lexer) readIdentifierOrKeyword() token.Token {
 	}
 
 	if t, ok := token.Lookup(literal); ok {
-		return token.Token{Type: t, Literal: literal, Line: l.line, Column: startCol}
+		return token.Token{Type: t, Literal: literal, Line: l.line, Column: startCol, LeadingSpace: l.spaceBefore}
 	}
-	return token.Token{Type: token.IDENT, Literal: literal, Line: l.line, Column: startCol}
+	return token.Token{Type: token.IDENT, Literal: literal, Line: l.line, Column: startCol, LeadingSpace: l.spaceBefore}
+}
+
+// splitMemberAfterParen 处理右括号后的“的成员”粘连写法。
+// noSpace 表示右括号与“的”之间没有空白（属于同一条多段调用）。
+func (l *Lexer) splitMemberAfterParen(start int, startCol int, noSpace bool) token.Token {
+	end := start + len([]rune("的"))
+	if end > len(l.src) || (end < len(l.src) && l.src[end] == '\n') {
+		return token.Token{Type: token.IDENT, Literal: string(l.src[start:l.pos]), Line: l.line, Column: startCol}
+	}
+	l.pos = end
+	return token.Token{Type: token.MEMBER, Literal: "的", Line: l.line, Column: startCol, LeadingSpace: !noSpace}
 }
 
 func isDigit(r rune) bool {

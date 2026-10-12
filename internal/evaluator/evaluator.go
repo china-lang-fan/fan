@@ -292,6 +292,9 @@ func evalIdentifier(ident *ast.Identifier, env *Environment) (object.Object, err
 }
 
 func evalMaybeCallExpr(expr *ast.MaybeCallExpr, env *Environment) (object.Object, error) {
+	if chain, ok := collectMixfixCallChain(expr.Callee); ok && env.mixfixFunctions().hasRoot(chain.root) {
+		return evalMixfixCall(chain, env, expr.Position)
+	}
 	if member, ok := expr.Callee.(*ast.MemberExpr); ok {
 		target, err := Eval(member.Object, env)
 		if err != nil {

@@ -69,6 +69,9 @@ func collectMixfixCallChain(node ast.Expression) (*mixfixCallChain, bool) {
 			if !isMember {
 				return nil, false
 			}
+			if member.Spaced {
+				return nil, false
+			}
 			outward = append(outward, mixfixCallSegment{
 				connector: member.Connector,
 				name:      member.Name,
@@ -77,6 +80,9 @@ func collectMixfixCallChain(node ast.Expression) (*mixfixCallChain, bool) {
 			})
 			current = member.Object
 		case *ast.ImplicitReceiverCallExpr:
+			if call.Spaced {
+				return nil, false
+			}
 			outward = append(outward, mixfixCallSegment{
 				connector: call.Connector,
 				name:      call.Name,
@@ -84,6 +90,17 @@ func collectMixfixCallChain(node ast.Expression) (*mixfixCallChain, bool) {
 				args:      call.Args,
 			})
 			current = call.Receiver
+		case *ast.MemberExpr:
+			// 无括号末段：仅允许出现在链尾，且必须紧邻。
+			if call.Spaced {
+				return nil, false
+			}
+			outward = append(outward, mixfixCallSegment{
+				connector: call.Connector,
+				name:      call.Name,
+				size:      0,
+			})
+			current = call.Object
 		default:
 			goto root
 		}
@@ -107,8 +124,8 @@ root:
 		chain.groupSize = append(chain.groupSize, segment.size)
 		chain.arguments = append(chain.arguments, segment.args)
 	}
-	for _, size := range chain.groupSize {
-		if size == 0 {
+	for i, size := range chain.groupSize {
+		if size == 0 && i != len(chain.groupSize)-1 {
 			return nil, false
 		}
 	}

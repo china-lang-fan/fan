@@ -707,6 +707,7 @@ func (p *Parser) parseImplicitCall(head ast.Expression) ast.Expression {
 	}
 	name := p.cur.Literal
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	spaced := p.cur.LeadingSpace
 	p.next()
 	var args []ast.Expression
 	if p.cur.Type == token.LPAREN {
@@ -722,7 +723,7 @@ func (p *Parser) parseImplicitCall(head ast.Expression) ast.Expression {
 			return nil
 		}
 	}
-	return p.parsePostfix(&ast.ImplicitReceiverCallExpr{Position: pos, Receiver: head, Name: name, Args: args})
+	return p.parsePostfix(&ast.ImplicitReceiverCallExpr{Position: pos, Receiver: head, Name: name, Args: args, Spaced: spaced})
 }
 
 func (p *Parser) parseImplicitFunctionArgs(head ast.Expression) ast.Expression {
@@ -1376,13 +1377,14 @@ func (p *Parser) parseThrowStatement() ast.Statement {
 func (p *Parser) parseMember(left ast.Expression) ast.Expression {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
 	connector := p.cur.Literal
+	spaced := p.cur.LeadingSpace
 	p.next()
 	if p.cur.Type != token.IDENT {
 		p.addError(p.cur, "的 后面需要成员名")
 		return nil
 	}
 	name := p.cur.Literal
-	node := &ast.MemberExpr{Position: pos, Object: left, Name: name, Connector: connector}
+	node := &ast.MemberExpr{Position: pos, Object: left, Name: name, Connector: connector, Spaced: spaced}
 	p.next()
 	if p.cur.Type == token.LPAREN {
 		args, ok := p.parseArgs()
@@ -1489,13 +1491,20 @@ func (p *Parser) parseFunctionStatement() ast.Statement {
 	}
 	name := p.cur.Literal
 	p.next()
-	params, ok := p.parseParamList()
-	if !ok {
-		return nil
-	}
+	var params []ast.Parameter
+	var groupSizes []int
 	segments := []string{name}
 	connectors := []string{""}
-	groupSizes := []int{len(params)}
+	if p.cur.Type == token.LPAREN {
+		var ok bool
+		params, ok = p.parseParamList()
+		if !ok {
+			return nil
+		}
+		groupSizes = []int{len(params)}
+	} else {
+		groupSizes = []int{0}
+	}
 	for p.cur.Type == token.MEMBER && p.peek.Type == token.IDENT || p.cur.Type == token.IDENT {
 		connector := ""
 		if p.cur.Type == token.MEMBER {
@@ -1504,12 +1513,15 @@ func (p *Parser) parseFunctionStatement() ast.Statement {
 		}
 		segmentName := p.cur.Literal
 		p.next()
-		if p.cur.Type != token.LPAREN {
-			p.addError(p.cur, "分段函数每段后应有参数列表")
-			return nil
-		}
-		nextParams, paramOK := p.parseParamList()
-		if !paramOK {
+		var nextParams []ast.Parameter
+		if p.cur.Type == token.LPAREN {
+			var paramOK bool
+			nextParams, paramOK = p.parseParamList()
+			if !paramOK {
+				return nil
+			}
+		} else if !isFunctionSegmentBoundary(p.cur.Type) {
+			p.addError(p.cur, "分段函数每段后应有参数列表或结束")
 			return nil
 		}
 		segments = append(segments, segmentName)
@@ -1559,14 +1571,24 @@ func (p *Parser) parseFunctionStatement() ast.Statement {
 	}
 }
 
+func isFunctionSegmentBoundary(t token.Type) bool {
+	switch t {
+	case token.EOF, token.NEWLINE, token.ARROW:
+		return true
+	}
+	return false
+}
+
 func validateMixfixParams(segments []string, groupSizes []int, params []ast.Parameter) (bool, string) {
-	for _, size := range groupSizes {
+	for i, size := range groupSizes[:len(groupSizes)-1] {
 		if size == 0 {
-			return false, "分段函数每段至少需要一个参数"
+			return false, fmt.Sprintf("分段函数第 %d 段至少需要一个参数", i+1)
 		}
 	}
-	if len(params) == 0 {
-		return false, "分段函数每段至少需要一个参数"
+	if groupSizes[len(groupSizes)-1] == 0 && len(segments) > 1 {
+		// 允许最后一段为空。
+	} else if len(params) == 0 && len(segments) > 1 {
+		return false, "分段函数至少需要一个参数"
 	}
 	for _, param := range params {
 		if param.Type == ast.TypeAny {

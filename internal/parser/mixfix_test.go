@@ -27,7 +27,33 @@ func TestMixfixFunctionDefinition(t *testing.T) {
 
 func TestMixfixFunctionRequiresExplicitTypes(t *testing.T) {
 	expectError(t, "函数 标记(值)的状态(新值 字符串)\n结束")
-	expectError(t, "函数 标记(值 字符串)的状态()\n结束")
 	expectError(t, "函数 标记(值 字符串 = \"x\")的状态(新值 字符串)\n结束")
 	expectError(t, "函数 标记(值 ...字符串)的状态(新值 字符串)\n结束")
+	expectError(t, "函数 标记()的状态(新值 字符串)\n结束")
+}
+
+func TestMixfixFunctionEmptyLastSegment(t *testing.T) {
+	for _, src := range []string{
+		"函数 标记(值 字符串)的状态()\n    返回 值\n结束",
+		"函数 标记(值 字符串)的状态\n    返回 值\n结束",
+	} {
+		prog := mustParse(t, src)
+		decl := prog.Statements[0].(*ast.VarDecl)
+		literal := decl.Value.(*ast.FunctionLiteral)
+		if len(literal.NameSegments) != 2 || literal.GroupSizes[1] != 0 {
+			t.Fatalf("末段应为空参：%+v", literal.GroupSizes)
+		}
+		if literal.Signature != "标记(字符串)的状态()" {
+			t.Fatalf("签名错误：%s", literal.Signature)
+		}
+	}
+}
+
+func TestNormalFunctionOmitsParens(t *testing.T) {
+	prog := mustParse(t, "函数 打招呼\n    打印(\"你好\")\n结束")
+	decl := prog.Statements[0].(*ast.VarDecl)
+	literal := decl.Value.(*ast.FunctionLiteral)
+	if len(literal.Params) != 0 || len(literal.NameSegments) != 0 {
+		t.Fatalf("无参普通函数解析错误：%+v", literal)
+	}
 }

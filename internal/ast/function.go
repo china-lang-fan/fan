@@ -97,6 +97,9 @@ type MemberExpr struct {
 	Object    Expression
 	Name      string
 	Connector string
+	// Spaced 表示对象与连接词之间是否有空白。多段函数调用要求各段紧邻，
+	// 带空格时按“普通调用返回值的后续成员”处理。
+	Spaced bool
 }
 
 func (n *MemberExpr) Pos() Position   { return n.Position }
@@ -111,6 +114,8 @@ type ImplicitReceiverCallExpr struct {
 	Name      string
 	Args      []Expression
 	Connector string
+	// Spaced 表示本段与前一段之间存在空白；多段函数要求各段紧邻。
+	Spaced bool
 }
 
 func (n *ImplicitReceiverCallExpr) Pos() Position   { return n.Position }
