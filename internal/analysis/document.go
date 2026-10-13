@@ -22,6 +22,8 @@ type Document struct {
 	classes map[string]*Symbol
 	// imports 按 导入时绑定的模块名 保存导入信息。
 	imports map[string]*importInfo
+	// fnRanges 记录函数体的行范围，供按光标位置找所在函数。
+	fnRanges []fnRange
 }
 
 type importInfo struct {
@@ -74,8 +76,61 @@ func ParseDocument(uri, source string) *Document {
 	}
 	if prog != nil {
 		doc.collect()
+		doc.collectFunctionRanges()
 	}
 	return doc
+}
+
+// fnRange 记录一个函数体在文件中的行范围（1-based）。
+type fnRange struct {
+	fn        *ast.FunctionLiteral
+	startLine int
+	endLine   int
+}
+
+func (d *Document) collectFunctionRanges() {
+	walk(d.Prog, func(node ast.Node) bool {
+		fn, ok := node.(*ast.FunctionLiteral)
+		if !ok || fn.Body == nil {
+			return true
+		}
+		end := fn.Position.Line
+		for _, stmt := range fn.Body.Statements {
+			if line := nodeMaxLine(stmt); line > end {
+				end = line
+			}
+		}
+		d.fnRanges = append(d.fnRanges, fnRange{fn: fn, startLine: fn.Position.Line, endLine: end})
+		return true
+	})
+}
+
+func nodeMaxLine(node ast.Node) int {
+	maxLine := node.Pos().Line
+	walk(node, func(n ast.Node) bool {
+		if n.Pos().Line > maxLine {
+			maxLine = n.Pos().Line
+		}
+		return true
+	})
+	return maxLine
+}
+
+// functionAtLine 返回包含指定 0-based 行的最内层函数。
+func (d *Document) functionAtLine(line0 int) *ast.FunctionLiteral {
+	line1 := line0 + 1
+	var result *ast.FunctionLiteral
+	bestSpan := 1 << 30
+	for _, r := range d.fnRanges {
+		if line1 >= r.startLine && line1 <= r.endLine {
+			span := r.endLine - r.startLine
+			if span < bestSpan {
+				bestSpan = span
+				result = r.fn
+			}
+		}
+	}
+	return result
 }
 
 func (d *Document) collect() {
@@ -125,6 +180,9 @@ func (d *Document) collectStatement(stmt ast.Statement, owner string) {
 			classSym.Children = append(classSym.Children, &Symbol{
 				Name: field.Name, Kind: KindField, Owner: s.Name,
 				Detail: string(field.Type),
+				Pos:    field.Position,
+				EndPos: ast.Position{Line: field.Position.Line, Column: field.Position.Column + len([]rune(field.Name))},
+				Doc:    d.docBefore(field.Position.Line),
 			})
 		}
 		d.add(classSym)

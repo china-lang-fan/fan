@@ -47,6 +47,9 @@ func (d *Document) checkUndefinedNames(idx *Index) []Diagnostic {
 
 	var diags []Diagnostic
 
+	// 顶层语句：在全局名字集合下检查表达式中的标识符。
+	diags = append(diags, d.checkTopLevelExpressions(defined)...)
+
 	// 顶层语句各自模拟一次作用域。
 	for _, stmt := range d.Prog.Statements {
 		inner, _ := unwrapExport(stmt)
@@ -60,7 +63,68 @@ func (d *Document) checkUndefinedNames(idx *Index) []Diagnostic {
 			diags = append(diags, checkFunctionBody(d, method.Function, defined)...)
 		}
 	}
-	_ = idx
+	return diags
+}
+
+// checkTopLevelExpressions 检查顶层（函数体外）表达式中的未定义标识符。
+func (d *Document) checkTopLevelExpressions(globals map[string]bool) []Diagnostic {
+	var diags []Diagnostic
+	for _, stmt := range d.Prog.Statements {
+		inner, _ := unwrapExport(stmt)
+		switch s := inner.(type) {
+		case *ast.VarDecl:
+			if _, isFn := s.Value.(*ast.FunctionLiteral); isFn {
+				continue
+			}
+			if s.Value != nil {
+				diags = append(diags, checkExprUndefined(s.Value, globals)...)
+			}
+		case *ast.ExpressionStmt:
+			diags = append(diags, checkExprUndefined(s.Expression, globals)...)
+		case *ast.AssignStmt:
+			diags = append(diags, checkExprUndefined(s.Value, globals)...)
+		case *ast.CompoundAssignStmt:
+			diags = append(diags, checkExprUndefined(s.Target, globals)...)
+			diags = append(diags, checkExprUndefined(s.Value, globals)...)
+		case *ast.ReturnStmt:
+			for _, v := range s.Values {
+				diags = append(diags, checkExprUndefined(v, globals)...)
+			}
+		case *ast.ImportStmt:
+			// 模块名已在 globals 中。
+		}
+	}
+	return diags
+}
+
+func checkExprUndefined(expr ast.Expression, globals map[string]bool) []Diagnostic {
+	var diags []Diagnostic
+	walk(expr, func(node ast.Node) bool {
+		// 不进入嵌套函数字面量，其内部由函数作用域检查。
+		if _, ok := node.(*ast.FunctionLiteral); ok && node != expr {
+			return false
+		}
+		ident, ok := node.(*ast.Identifier)
+		if !ok {
+			return true
+		}
+		if globals[ident.Name] || softKeywords[ident.Name] {
+			return true
+		}
+		if _, ok := builtinNames[ident.Name]; ok {
+			return true
+		}
+		diags = append(diags, Diagnostic{
+			Line:     ident.Position.Line,
+			Column:   ident.Position.Column,
+			EndLine:  ident.Position.Line,
+			EndCol:   ident.Position.Column + len([]rune(ident.Name)),
+			Severity: SeverityWarning,
+			Code:     "undefined-name",
+			Message:  "未定义的名字：" + ident.Name,
+		})
+		return true
+	})
 	return diags
 }
 

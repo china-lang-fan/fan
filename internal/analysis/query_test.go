@@ -89,8 +89,91 @@ func TestCrossModuleHover(t *testing.T) {
 	}
 }
 
-func contains(haystack, needle string) bool {
-	return strings.Contains(haystack, needle)
+func TestInferLocalVariableTypeForMemberCompletion(t *testing.T) {
+	src := `模型 用户
+    变量 字符串 名
+结束
+
+函数 测试()
+    变量 u = 用户()
+    返回 u.名
+结束
+`
+	idx := BuildIndex("file:///t.凡", src)
+	locals := idx.localsAt(6)
+	if locals["u"] != "用户" {
+		t.Fatalf("局部变量 u 类型推断错误：%q", locals["u"])
+	}
+	// 第 7 行（0-based 6）为“    返回 u.名”，“名”从第 9 个 UTF-16 码元起
+	hover := idx.Hover(6, 9)
+	if hover == nil || !contains(hover.Content, "名") {
+		t.Fatal("u.名 悬停应解析到模型字段")
+	}
+	items := idx.memberCompletions("用户")
+	found := false
+	for _, item := range items {
+		if item.Label == "名" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("模型成员补全应包含字段 名")
+	}
+}
+
+func TestPrimitiveMethodCompletion(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir+"/字符串.凡", `# 反转字符串
+定义 字符串 的 方法 反转() -> 字符串
+    返回 ""
+结束
+`)
+	main := `导入 "字符串" 作为 字符串模块
+
+函数 测试(文本 字符串)
+    返回 文本.反转()
+结束
+`
+	idx := BuildIndex("file://"+dir+"/main.凡", main)
+	fn := idx.lookupMethod("字符串", "反转")
+	if fn == nil {
+		t.Fatal("应找到原生类型方法 反转")
+	}
+	if fn.Doc != "反转字符串" {
+		t.Fatalf("原生方法文档错误：%q", fn.Doc)
+	}
+}
+
+func TestMixfixMiddleSegmentHover(t *testing.T) {
+	src := `函数 修改(值 字符串)的状态为无效
+    返回 值
+结束
+
+修改("x")的状态为无效
+`
+	idx := BuildIndex("file:///t.凡", src)
+	// 光标在最后一行“状态为无效”段名上
+	hover := idx.Hover(4, 14)
+	if hover == nil {
+		t.Fatal("点分段函数中段应能悬停")
+	}
+	if !contains(hover.Content, "修改") {
+		t.Fatalf("悬停内容应指向分段函数：%s", hover.Content)
+	}
+}
+
+func TestTopLevelUndefinedDiagnostic(t *testing.T) {
+	src := `打印(顶层未定义名字)
+`
+	found := false
+	for _, d := range Analyze(src) {
+		if d.Code == "undefined-name" && contains(d.Message, "顶层未定义名字") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("顶层表达式中的未定义名字应告警")
+	}
 }
 
 func writeFile(t *testing.T, path, content string) {
@@ -101,4 +184,8 @@ func writeFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func contains(haystack, needle string) bool {
+	return strings.Contains(haystack, needle)
 }

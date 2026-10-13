@@ -1884,8 +1884,13 @@ func (p *Parser) parseClassStatement() ast.Statement {
 				p.addError(p.cur, "字段名应为标识符")
 				return nil
 			}
-			cls.Fields = append(cls.Fields, ast.FieldDecl{Name: p.cur.Literal, Type: dt})
+			nameToken := p.cur
 			p.next()
+			cls.Fields = append(cls.Fields, ast.FieldDecl{
+				Position: ast.Position{Line: nameToken.Line, Column: nameToken.Column},
+				Name:     nameToken.Literal,
+				Type:     dt,
+			})
 			if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF {
 				p.addError(p.cur, "字段声明应换行结束")
 				return nil

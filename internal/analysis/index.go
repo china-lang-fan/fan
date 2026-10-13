@@ -19,7 +19,20 @@ type Index struct {
 // uri 可以是 file:// URI 或文件路径；找不到文件时仍返回仅含入口的索引。
 func BuildIndex(uri, source string) *Index {
 	path := uriToPath(uri)
-	base := filepath.Dir(path)
+	return buildIndex(filepath.Dir(path), uri, source)
+}
+
+// buildIndexWithBase 使用指定基目录（模块搜索起点）构建索引。
+func buildIndexWithBase(baseDir, uri, source string) *Index {
+	return buildIndex(baseDir, uri, source)
+}
+
+func buildIndex(baseDir, uri, source string) *Index {
+	path := uriToPath(uri)
+	base := baseDir
+	if base == "." || base == "" {
+		base = filepath.Dir(path)
+	}
 	index := &Index{
 		baseDir:    base,
 		docs:       map[string]*Document{},

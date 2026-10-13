@@ -6,8 +6,9 @@ import (
 )
 
 type FieldDecl struct {
-	Name string
-	Type DeclType
+	Position Position
+	Name     string
+	Type     DeclType
 }
 
 type ClassStmt struct {

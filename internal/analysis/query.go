@@ -125,6 +125,7 @@ func indexOfName(line, name string, fallback int) int {
 // Hover 查询入口文档指定位置符号的说明。
 func (idx *Index) Hover(line0, char16 int) *HoverResult {
 	doc := idx.root
+	locals := idx.localsAt(line0)
 	word := doc.wordAt(line0, char16)
 	if word.text == "" {
 		return nil
@@ -136,7 +137,10 @@ func (idx *Index) Hover(line0, char16 int) *HoverResult {
 	if sym := idx.lookupRoot(word.text); sym != nil {
 		return &HoverResult{Content: formatHover(sym), Range: rng}
 	}
-	if owner, member, ok := idx.memberAt(line0, word.startCol, char16); ok {
+	if sym := idx.mixfixSymbolAt(line0, word.text); sym != nil {
+		return &HoverResult{Content: formatHover(sym), Range: rng}
+	}
+	if owner, member, ok := idx.memberAt(line0, word.startCol, char16, locals); ok {
 		if sym := idx.lookupMember(owner, member); sym != nil {
 			return &HoverResult{Content: formatHover(sym), Range: rng}
 		}
@@ -144,10 +148,77 @@ func (idx *Index) Hover(line0, char16 int) *HoverResult {
 	return nil
 }
 
+// mixfixSymbolAt 查找光标所在行中包含指定段名的分段函数符号。
+// 光标词可能是粘连的“的状态为无效”（词法器在调用处才拆分“的”），
+// 因此在行内所有分段定义的段名中做后缀/包含匹配。
+func (idx *Index) mixfixSymbolAt(line0 int, segmentWord string) *Symbol {
+	if segmentWord == "" {
+		return nil
+	}
+	line := idx.root.lineText(line0 + 1)
+	root := mixfixRootOnLine(line)
+	if root == "" {
+		return nil
+	}
+	// 符号名是各段连接后的全名（如“修改的状态为无效”），
+	// 在所有顶层符号中找首段名为 root 的分段函数。
+	for _, sym := range idx.root.topLevels {
+		if sym.fn == nil || len(sym.fn.NameSegments) < 2 || sym.fn.NameSegments[0] != root {
+			continue
+		}
+		for segIndex, seg := range sym.fn.NameSegments {
+			if segIndex == 0 {
+				continue
+			}
+			connector := sym.fn.Connectors[segIndex]
+			if segmentWord == seg || segmentWord == connector+seg ||
+				strings.Contains(segmentWord, seg) && strings.HasSuffix(segmentWord, seg) {
+				return sym
+			}
+		}
+	}
+	return nil
+}
+
+// mixfixRootOnLine 从一行文本中找出分段函数调用的首段名：
+// 形如 名字(...)的段(...)… 或 名字(...)段(…)…。
+func mixfixRootOnLine(line string) string {
+	runes := []rune(line)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] != '(' && runes[i] != '（' {
+			continue
+		}
+		start := i - 1
+		for start >= 0 && isLetter(runes[start]) {
+			start--
+		}
+		start++
+		if start < i {
+			return string(runes[start:i])
+		}
+	}
+	return ""
+}
+
+// localsAt 返回光标所在函数体内的局部变量类型映射。
+func (idx *Index) localsAt(line0 int) map[string]string {
+	fn := idx.root.functionAtLine(line0)
+	if fn == nil {
+		return nil
+	}
+	return idx.localTypesForFunction(fn)
+}
+
 func formatHover(sym *Symbol) string {
 	var builder strings.Builder
 	if sym.Detail != "" {
-		builder.WriteString("```fan\n" + sym.Detail + "\n```")
+		// 字段/变量显示“名字: 类型”，函数显示签名。
+		if sym.Kind == KindField || sym.Kind == KindVariable ||
+			sym.Kind == KindConstant || sym.Kind == KindParameter {
+			builder.WriteString("```fan\n" + sym.Name + ": " + sym.Detail + "\n```")
+		} else {
+			builder.WriteString("```fan\n" + sym.Detail + "\n```")
+		}
 	}
 	if sym.Doc != "" {
 		if builder.Len() > 0 {
@@ -203,6 +274,7 @@ func (idx *Index) moduleDoc(importPath string) *Document {
 // Definition 返回入口文档指定位置符号的定义位置。
 func (idx *Index) Definition(line0, char16 int) *Location {
 	doc := idx.root
+	locals := idx.localsAt(line0)
 	word := doc.wordAt(line0, char16)
 	if word.text == "" {
 		return nil
@@ -211,7 +283,10 @@ func (idx *Index) Definition(line0, char16 int) *Location {
 		targetDoc := doc
 		return &Location{URI: targetDoc.URI, Range: nameRange(targetDoc, sym.Name, sym.Pos)}
 	}
-	if owner, member, ok := idx.memberAt(line0, word.startCol, char16); ok {
+	if sym := idx.mixfixSymbolAt(line0, word.text); sym != nil {
+		return &Location{URI: doc.URI, Range: nameRange(doc, sym.fn.NameSegments[0], sym.Pos)}
+	}
+	if owner, member, ok := idx.memberAt(line0, word.startCol, char16, locals); ok {
 		return idx.memberDefinition(owner, member)
 	}
 	return nil
@@ -249,14 +324,16 @@ func (idx *Index) memberDefinition(owner, member string) *Location {
 
 // memberAt 判断光标处标识符是否为“对象.成员/对象 的 成员”的右半部分，
 // 返回推断出的属主类型或模块名与成员名。
-func (idx *Index) memberAt(line0, memberCol1, char16 int) (string, string, bool) {
-	_ = char16
+func (idx *Index) memberAt(line0, memberCol1, char16 int, locals map[string]string) (string, string, bool) {
 	doc := idx.root
 	line := doc.lineText(line0 + 1)
 	runes := []rune(line)
 	pos := memberCol1 - 1
+	if pos < 0 || pos > len(runes) {
+		return "", "", false
+	}
 	i := pos - 1
-	for i >= 0 && (runes[i] == ' ' || runes[i] == '\t') {
+	for i >= 0 && i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
 		i--
 	}
 	if i < 0 {
@@ -286,7 +363,15 @@ func (idx *Index) memberAt(line0, memberCol1, char16 int) (string, string, bool)
 	if word.text == "" {
 		return "", "", false
 	}
-	return idx.resolveOwnerType(owner), word.text, true
+	ownerType := owner
+	if locals != nil {
+		if t, ok := locals[owner]; ok && t != "" {
+			ownerType = t
+		} else if t := idx.inferIdentifier(owner, locals); t != "" {
+			ownerType = t
+		}
+	}
+	return ownerType, word.text, true
 }
 
 // resolveOwnerType 把表达式名字推断为属主类型/模块名：
@@ -316,10 +401,19 @@ func (idx *Index) localType(name string) (ast.DeclType, bool) {
 func (idx *Index) Completion(line0, char16 int) []CompletionItem {
 	doc := idx.root
 	line := doc.lineText(line0 + 1)
-	if owner, ok := completionOwner(line, char16); ok {
+	locals := idx.localsAt(line0)
+	if ownerExpr, ok := completionOwner(line, char16); ok {
+		owner := ownerExpr
+		if locals != nil {
+			if t, ok := locals[ownerExpr]; ok && t != "" {
+				owner = t
+			} else if t := idx.inferIdentifier(ownerExpr, locals); t != "" {
+				owner = t
+			}
+		}
 		return idx.memberCompletions(owner)
 	}
-	return idx.rootCompletions()
+	return idx.rootCompletions(locals)
 }
 
 // completionOwner 检查光标前是否为 “.” 或 “的 ”，返回左表达式名字。
@@ -354,7 +448,7 @@ func completionOwner(line string, char16 int) (string, bool) {
 	return string(runes[start : j+1]), true
 }
 
-func (idx *Index) rootCompletions() []CompletionItem {
+func (idx *Index) rootCompletions(locals map[string]string) []CompletionItem {
 	seen := map[string]bool{}
 	var items []CompletionItem
 	add := func(item CompletionItem) {
@@ -363,6 +457,11 @@ func (idx *Index) rootCompletions() []CompletionItem {
 		}
 		seen[item.Label] = true
 		items = append(items, item)
+	}
+	if locals != nil {
+		for name, typ := range locals {
+			add(CompletionItem{Label: name, Kind: KindVariable, Detail: typ})
+		}
 	}
 	for _, sym := range idx.root.topLevels {
 		add(CompletionItem{Label: sym.Name, Kind: sym.Kind, Detail: sym.Detail, Doc: sym.Doc})
@@ -405,12 +504,45 @@ func (idx *Index) memberCompletions(ownerExpr string) []CompletionItem {
 			add(CompletionItem{Label: child.Name, Kind: child.Kind, Detail: child.Detail, Doc: child.Doc})
 		}
 	}
-	for _, sym := range idx.root.topLevels {
-		if sym.Kind == KindMethod && sym.Owner == owner {
-			add(CompletionItem{Label: sym.Name, Kind: sym.Kind, Detail: sym.Detail, Doc: sym.Doc})
+	// 模型方法（入口文件或导入模块中“定义 <模型> 的 方法”）
+	for _, doc := range idx.allDocs() {
+		for _, sym := range doc.byName {
+			for _, s := range sym {
+				if s.Kind == KindMethod && s.Owner == owner {
+					add(CompletionItem{Label: s.Name, Kind: s.Kind, Detail: s.Detail, Doc: s.Doc})
+				}
+			}
+		}
+	}
+	// 原生类型的内置方法（字符串/数组/字典等，在 SDK 中定义）
+	for _, doc := range idx.allDocs() {
+		for _, sym := range doc.byName {
+			for _, s := range sym {
+				if s.Kind == KindMethod && isPrimitiveType(s.Owner) && owner == s.Owner {
+					add(CompletionItem{Label: s.Name, Kind: s.Kind, Detail: s.Detail, Doc: s.Doc})
+				}
+			}
 		}
 	}
 	return items
+}
+
+func (idx *Index) allDocs() []*Document {
+	docs := []*Document{idx.root}
+	for _, d := range idx.docs {
+		if d != idx.root {
+			docs = append(docs, d)
+		}
+	}
+	return docs
+}
+
+func isPrimitiveType(name string) bool {
+	switch name {
+	case "字符串", "整数", "小数", "布尔", "数组", "字典":
+		return true
+	}
+	return false
 }
 
 // CompletionKeywords 是补全列表中的关键字。
