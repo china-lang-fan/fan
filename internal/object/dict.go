@@ -41,13 +41,17 @@ func dictKey(k Object) string {
 			return "b:1"
 		}
 		return "b:0"
+	case *Byte:
+		return "y:" + strconv.Itoa(int(v.Value))
+	case *Char:
+		return "c:" + string(v.Value)
 	}
 	return ""
 }
 
 func ValidDictKey(k Object) bool {
 	switch k.(type) {
-	case *Integer, *Float, *String, *Bool:
+	case *Integer, *Float, *String, *Bool, *Byte, *Char:
 		return true
 	}
 	return false

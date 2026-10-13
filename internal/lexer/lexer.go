@@ -53,6 +53,10 @@ func (l *Lexer) NextToken() token.Token {
 		return l.readString()
 	}
 
+	if r == '\'' || r == '‘' {
+		return l.readChar()
+	}
+
 	if isDigit(r) {
 		return l.readNumber()
 	}
@@ -252,20 +256,11 @@ func (l *Lexer) readString() token.Token {
 		}
 		if r == '\\' {
 			next := l.peek(1)
-			switch next {
-			case 'n':
-				b.WriteByte('\n')
-			case 't':
-				b.WriteByte('\t')
-			case 'r':
-				b.WriteByte('\r')
-			case '"':
-				b.WriteByte('"')
-			case '\\':
-				b.WriteByte('\\')
-			default:
+			escaped, ok := escapeRune(next)
+			if !ok {
 				return token.Token{Type: token.ILLEGAL, Literal: fmt.Sprintf("未知转义 \\%s", string(next)), Line: l.line, Column: l.col}
 			}
+			b.WriteRune(escaped)
 			l.advance()
 			l.advance()
 			continue
@@ -274,6 +269,69 @@ func (l *Lexer) readString() token.Token {
 		l.advance()
 	}
 	return token.Token{Type: token.ILLEGAL, Literal: "字符串未闭合", Line: l.line, Column: startCol}
+}
+
+// readChar 读取字符字面量，支持半角单引号（'A'）与全角单引号（‘中’）。
+// 字面量内容是单个 Unicode 字符（转义后）。
+func (l *Lexer) readChar() token.Token {
+	startCol := l.col
+	open := l.src[l.pos]
+	close := rune('\'')
+	if open == '‘' {
+		close = '’'
+	}
+	l.advance()
+	var value rune
+	count := 0
+	for l.pos < len(l.src) {
+		r := l.src[l.pos]
+		if r == close {
+			l.advance()
+			if count != 1 {
+				return token.Token{Type: token.ILLEGAL, Literal: "字符字面量必须包含恰好一个字符", Line: l.line, Column: startCol}
+			}
+			return token.Token{Type: token.CHAR, Literal: string(value), Line: l.line, Column: startCol}
+		}
+		if r == '\n' {
+			return token.Token{Type: token.ILLEGAL, Literal: "字符字面量未闭合", Line: l.line, Column: startCol}
+		}
+		if r == '\\' {
+			next := l.peek(1)
+			escaped, ok := escapeRune(next)
+			if !ok {
+				return token.Token{Type: token.ILLEGAL, Literal: fmt.Sprintf("未知转义 \\%s", string(next)), Line: l.line, Column: l.col}
+			}
+			value = escaped
+			l.advance()
+			l.advance()
+		} else {
+			value = r
+			l.advance()
+		}
+		count++
+		if count > 1 {
+			return token.Token{Type: token.ILLEGAL, Literal: "字符字面量必须包含恰好一个字符", Line: l.line, Column: startCol}
+		}
+	}
+	return token.Token{Type: token.ILLEGAL, Literal: "字符字面量未闭合", Line: l.line, Column: startCol}
+}
+
+func escapeRune(r rune) (rune, bool) {
+	switch r {
+	case 'n':
+		return '\n', true
+	case 't':
+		return '\t', true
+	case 'r':
+		return '\r', true
+	case '"':
+		return '"', true
+	case '\'':
+		return '\'', true
+	case '\\':
+		return '\\', true
+	}
+	return 0, false
 }
 
 func (l *Lexer) readIdentifierOrKeyword() token.Token {

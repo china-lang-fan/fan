@@ -79,6 +79,10 @@ func zeroValueForType(dt ast.DeclType) object.Object {
 		return &object.Dict{}
 	case ast.TypeError:
 		return object.Null
+	case ast.TypeByte:
+		return &object.Byte{}
+	case ast.TypeChar:
+		return &object.Char{}
 	}
 	return object.Null
 }

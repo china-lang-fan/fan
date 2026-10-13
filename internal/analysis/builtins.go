@@ -17,7 +17,8 @@ func init() {
 	}
 	for _, t := range []ast.DeclType{
 		ast.TypeInt, ast.TypeFloat, ast.TypeString, ast.TypeBool,
-		ast.TypeArray, ast.TypeDict, ast.TypeError, ast.TypeAny,
+		ast.TypeArray, ast.TypeDict, ast.TypeError, ast.TypeByte,
+		ast.TypeChar, ast.TypeAny,
 	} {
 		typeKeywords[string(t)] = true
 	}

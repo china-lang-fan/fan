@@ -16,6 +16,8 @@ const (
 	TypeArray  DeclType = "数组"
 	TypeDict   DeclType = "字典"
 	TypeError  DeclType = "错误"
+	TypeByte   DeclType = "字节"
+	TypeChar   DeclType = "字符"
 )
 
 type Position struct {
@@ -179,6 +181,15 @@ type StringLiteral struct {
 func (n *StringLiteral) Pos() Position   { return n.Position }
 func (n *StringLiteral) expressionNode() {}
 func (n *StringLiteral) String() string  { return fmt.Sprintf("%q", n.Value) }
+
+type CharLiteral struct {
+	Position Position
+	Value    rune
+}
+
+func (n *CharLiteral) Pos() Position   { return n.Position }
+func (n *CharLiteral) expressionNode() {}
+func (n *CharLiteral) String() string  { return fmt.Sprintf("%q", string(n.Value)) }
 
 type BoolLiteral struct {
 	Position Position

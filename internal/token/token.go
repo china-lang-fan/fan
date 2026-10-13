@@ -11,6 +11,7 @@ const (
 	INT    Type = "INT"
 	FLOAT  Type = "FLOAT"
 	STRING Type = "STRING"
+	CHAR   Type = "CHAR"
 
 	ASSIGN   Type = "ASSIGN"
 	PLUS_EQ  Type = "PLUS_EQ"
@@ -61,6 +62,8 @@ const (
 	TYPE_ARRAY  Type = "TYPE_ARRAY"
 	TYPE_DICT   Type = "TYPE_DICT"
 	TYPE_ERROR  Type = "TYPE_ERROR"
+	TYPE_BYTE   Type = "TYPE_BYTE"
+	TYPE_CHAR   Type = "TYPE_CHAR"
 
 	TRUE  Type = "TRUE"
 	FALSE Type = "FALSE"
@@ -117,6 +120,8 @@ var keywords = map[string]Type{
 	"数组":   TYPE_ARRAY,
 	"字典":   TYPE_DICT,
 	"错误":   TYPE_ERROR,
+	"字节":   TYPE_BYTE,
+	"字符":   TYPE_CHAR,
 	"真":    TRUE,
 	"假":    FALSE,
 	"空":    NIL,

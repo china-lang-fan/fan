@@ -14,6 +14,8 @@ func (idx *Index) inferType(expr ast.Expression, locals map[string]string) strin
 		return "小数"
 	case *ast.StringLiteral:
 		return "字符串"
+	case *ast.CharLiteral:
+		return "字符"
 	case *ast.BoolLiteral:
 		return "布尔"
 	case *ast.ArrayLiteral:

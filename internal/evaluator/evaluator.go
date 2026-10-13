@@ -105,6 +105,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return &object.Float{Value: n.Value}, nil
 	case *ast.StringLiteral:
 		return &object.String{Value: n.Value}, nil
+	case *ast.CharLiteral:
+		return &object.Char{Value: n.Value}, nil
 	case *ast.BoolLiteral:
 		return object.BoolOf(n.Value), nil
 	case *ast.NilLiteral:
@@ -471,8 +473,28 @@ func evalAdd(pos ast.Position, left, right object.Object) (object.Object, error)
 	if left.Kind() == object.KindString && right.Kind() == object.KindString {
 		return &object.String{Value: left.(*object.String).Value + right.(*object.String).Value}, nil
 	}
-	if left.Kind() == object.KindInt && right.Kind() == object.KindInt {
-		return &object.Integer{Value: left.(*object.Integer).Value + right.(*object.Integer).Value}, nil
+	// 字符串 + 字符 => 字符串
+	if left.Kind() == object.KindString && right.Kind() == object.KindChar {
+		return &object.String{Value: left.(*object.String).Value + string(right.(*object.Char).Value)}, nil
+	}
+	if left.Kind() == object.KindChar && right.Kind() == object.KindString {
+		return &object.String{Value: string(left.(*object.Char).Value) + right.(*object.String).Value}, nil
+	}
+	// 字符 + 整数 => 字符
+	if lc, ok := left.(*object.Char); ok {
+		if rv, ok := intValue(right); ok {
+			return &object.Char{Value: lc.Value + rune(rv)}, nil
+		}
+	}
+	if rc, ok := right.(*object.Char); ok {
+		if lv, ok := intValue(left); ok {
+			return &object.Char{Value: rc.Value + rune(lv)}, nil
+		}
+	}
+	if lv, ok := intValue(left); ok {
+		if rv, ok := intValue(right); ok {
+			return &object.Integer{Value: lv + rv}, nil
+		}
 	}
 	lv := toFloat(left)
 	rv := toFloat(right)
@@ -483,8 +505,10 @@ func evalAdd(pos ast.Position, left, right object.Object) (object.Object, error)
 }
 
 func evalSub(pos ast.Position, left, right object.Object) (object.Object, error) {
-	if left.Kind() == object.KindInt && right.Kind() == object.KindInt {
-		return &object.Integer{Value: left.(*object.Integer).Value - right.(*object.Integer).Value}, nil
+	if lv, ok := intValue(left); ok {
+		if rv, ok := intValue(right); ok {
+			return &object.Integer{Value: lv - rv}, nil
+		}
 	}
 	lv := toFloat(left)
 	rv := toFloat(right)
@@ -495,8 +519,10 @@ func evalSub(pos ast.Position, left, right object.Object) (object.Object, error)
 }
 
 func evalMul(pos ast.Position, left, right object.Object) (object.Object, error) {
-	if left.Kind() == object.KindInt && right.Kind() == object.KindInt {
-		return &object.Integer{Value: left.(*object.Integer).Value * right.(*object.Integer).Value}, nil
+	if lv, ok := intValue(left); ok {
+		if rv, ok := intValue(right); ok {
+			return &object.Integer{Value: lv * rv}, nil
+		}
 	}
 	lv := toFloat(left)
 	rv := toFloat(right)
@@ -507,12 +533,13 @@ func evalMul(pos ast.Position, left, right object.Object) (object.Object, error)
 }
 
 func evalDiv(pos ast.Position, left, right object.Object) (object.Object, error) {
-	if left.Kind() == object.KindInt && right.Kind() == object.KindInt {
-		r := right.(*object.Integer).Value
-		if r == 0 {
-			return nil, &EvalError{Pos: pos, Reason: "除数不能为零"}
+	if lv, ok := intValue(left); ok {
+		if rv, ok := intValue(right); ok {
+			if rv == 0 {
+				return nil, &EvalError{Pos: pos, Reason: "除数不能为零"}
+			}
+			return &object.Integer{Value: lv / rv}, nil
 		}
-		return &object.Integer{Value: left.(*object.Integer).Value / r}, nil
 	}
 	lv := toFloat(left)
 	rv := toFloat(right)
@@ -526,14 +553,15 @@ func evalDiv(pos ast.Position, left, right object.Object) (object.Object, error)
 }
 
 func evalMod(pos ast.Position, left, right object.Object) (object.Object, error) {
-	if left.Kind() != object.KindInt || right.Kind() != object.KindInt {
+	lv, lok := intValue(left)
+	rv, rok := intValue(right)
+	if !lok || !rok {
 		return nil, &EvalError{Pos: pos, Reason: "取余仅支持整数 % 整数"}
 	}
-	r := right.(*object.Integer).Value
-	if r == 0 {
+	if rv == 0 {
 		return nil, &EvalError{Pos: pos, Reason: "除数不能为零"}
 	}
-	return &object.Integer{Value: left.(*object.Integer).Value % r}, nil
+	return &object.Integer{Value: lv % rv}, nil
 }
 
 func evalEq(pos ast.Position, left, right object.Object) (object.Object, error) {
@@ -542,6 +570,21 @@ func evalEq(pos ast.Position, left, right object.Object) (object.Object, error) 
 	}
 	if left.Kind() == object.KindNil && right.Kind() == object.KindError {
 		return object.False, nil
+	}
+	// 整数家族（整数/字节）与字符（可比较码点）等值比较
+	if lv, lok := intValue(left); lok {
+		if rv, rok := intValue(right); rok {
+			return object.BoolOf(lv == rv), nil
+		}
+		if rc, ok := right.(*object.Char); ok {
+			return object.BoolOf(lv == int64(rc.Value)), nil
+		}
+		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("不同类型不可比较：%s 与 %s", left.Kind(), right.Kind())}
+	}
+	if lc, ok := left.(*object.Char); ok {
+		if rv, rok := intValue(right); rok {
+			return object.BoolOf(int64(lc.Value) == rv), nil
+		}
 	}
 	if left.Kind() != right.Kind() {
 		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("不同类型不可比较：%s 与 %s", left.Kind(), right.Kind())}
@@ -555,6 +598,10 @@ func evalEq(pos ast.Position, left, right object.Object) (object.Object, error) 
 		return object.BoolOf(left.(*object.String).Value == right.(*object.String).Value), nil
 	case object.KindBool:
 		return object.BoolOf(left.(*object.Bool).Value == right.(*object.Bool).Value), nil
+	case object.KindByte:
+		return object.BoolOf(left.(*object.Byte).Value == right.(*object.Byte).Value), nil
+	case object.KindChar:
+		return object.BoolOf(left.(*object.Char).Value == right.(*object.Char).Value), nil
 	case object.KindNil:
 		return object.True, nil
 	case object.KindArray:
@@ -570,6 +617,24 @@ func evalEq(pos ast.Position, left, right object.Object) (object.Object, error) 
 func evalCompare(pos ast.Position, left, right object.Object, accept ...int) (object.Object, error) {
 	if left.Kind() == object.KindArray || right.Kind() == object.KindArray {
 		return nil, &EvalError{Pos: pos, Reason: "数组不支持大小比较"}
+	}
+	if lc, ok := left.(*object.Char); ok {
+		if rc, ok := right.(*object.Char); ok {
+			cmp := 0
+			switch {
+			case lc.Value < rc.Value:
+				cmp = -1
+			case lc.Value > rc.Value:
+				cmp = 1
+			}
+			for _, a := range accept {
+				if cmp == a {
+					return object.True, nil
+				}
+			}
+			return object.False, nil
+		}
+		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("比较不支持 %s 与 %s", left.Kind(), right.Kind())}
 	}
 	lv := toFloat(left)
 	rv := toFloat(right)
@@ -648,8 +713,30 @@ func toFloat(o object.Object) *float64 {
 		return &f
 	case *object.Float:
 		return &v.Value
+	case *object.Byte:
+		f := float64(v.Value)
+		return &f
 	}
 	return nil
+}
+
+// intValue 把整数家族（整数、字节）转为 int64。
+func intValue(o object.Object) (int64, bool) {
+	switch v := o.(type) {
+	case *object.Integer:
+		return v.Value, true
+	case *object.Byte:
+		return int64(v.Value), true
+	}
+	return 0, false
+}
+
+func isIntFamily(o object.Object) bool {
+	switch o.(type) {
+	case *object.Integer, *object.Byte:
+		return true
+	}
+	return false
 }
 
 func evalReturnStmt(node *ast.ReturnStmt, env *Environment) (object.Object, error) {

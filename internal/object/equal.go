@@ -16,6 +16,10 @@ func DeepEqual(a, b Object) bool {
 		return left.Value == b.(*String).Value
 	case *Bool:
 		return left.Value == b.(*Bool).Value
+	case *Byte:
+		return left.Value == b.(*Byte).Value
+	case *Char:
+		return left.Value == b.(*Char).Value
 	case *Nil:
 		return true
 	case *Array:

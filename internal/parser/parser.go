@@ -209,7 +209,8 @@ func (p *Parser) parseStatement() ast.Statement {
 	case p.cur.Type == token.TYPE_INT || p.cur.Type == token.TYPE_FLOAT ||
 		p.cur.Type == token.TYPE_STRING || p.cur.Type == token.TYPE_BOOL ||
 		p.cur.Type == token.TYPE_ARRAY || p.cur.Type == token.TYPE_DICT ||
-		p.cur.Type == token.TYPE_ERROR:
+		p.cur.Type == token.TYPE_ERROR || p.cur.Type == token.TYPE_BYTE ||
+		p.cur.Type == token.TYPE_CHAR:
 		if p.peek.Type == token.IDENT {
 			return p.parseVarDecl()
 		}
@@ -477,6 +478,14 @@ func (p *Parser) parseVarDecl() ast.Statement {
 	case token.TYPE_ERROR:
 		sawKeyword = true
 		declType = ast.TypeError
+		p.next()
+	case token.TYPE_BYTE:
+		sawKeyword = true
+		declType = ast.TypeByte
+		p.next()
+	case token.TYPE_CHAR:
+		sawKeyword = true
+		declType = ast.TypeChar
 		p.next()
 	}
 
@@ -948,6 +957,15 @@ func (p *Parser) parsePrefix() ast.Expression {
 		node := &ast.StringLiteral{Position: pos, Value: p.cur.Literal}
 		p.next()
 		return node
+	case token.CHAR:
+		runes := []rune(p.cur.Literal)
+		if len(runes) != 1 {
+			p.addError(p.cur, "字符字面量必须包含恰好一个字符")
+			return nil
+		}
+		node := &ast.CharLiteral{Position: pos, Value: runes[0]}
+		p.next()
+		return node
 	case token.TRUE:
 		node := &ast.BoolLiteral{Position: pos, Value: true}
 		p.next()
@@ -972,6 +990,14 @@ func (p *Parser) parsePrefix() ast.Expression {
 		return node
 	case token.TYPE_ERROR:
 		node := &ast.Identifier{Position: pos, Name: "错误"}
+		p.next()
+		return node
+	case token.TYPE_BYTE:
+		node := &ast.Identifier{Position: pos, Name: "字节"}
+		p.next()
+		return node
+	case token.TYPE_CHAR:
+		node := &ast.Identifier{Position: pos, Name: "字符"}
 		p.next()
 		return node
 	case token.INC:
@@ -1379,7 +1405,7 @@ func (p *Parser) parseMember(left ast.Expression) ast.Expression {
 	connector := p.cur.Literal
 	spaced := p.cur.LeadingSpace
 	p.next()
-	if p.cur.Type != token.IDENT {
+	if p.cur.Type != token.IDENT && !isTypeToken(p.cur.Type) && p.cur.Type != token.SELF {
 		p.addError(p.cur, "的 后面需要成员名")
 		return nil
 	}
@@ -1485,7 +1511,7 @@ func (p *Parser) parseTagExpr() *ast.TagExpr {
 func (p *Parser) parseFunctionStatement() ast.Statement {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
 	p.next()
-	if p.cur.Type != token.IDENT {
+	if !isFunctionNameToken(p.cur.Type) {
 		p.addError(p.cur, "函数声明需要名字")
 		return nil
 	}
@@ -2002,6 +2028,10 @@ func parseDeclType(t token.Type) ast.DeclType {
 		return ast.TypeDict
 	case token.TYPE_ERROR:
 		return ast.TypeError
+	case token.TYPE_BYTE:
+		return ast.TypeByte
+	case token.TYPE_CHAR:
+		return ast.TypeChar
 	}
 	return ast.TypeAny
 }
@@ -2009,5 +2039,21 @@ func parseDeclType(t token.Type) ast.DeclType {
 func isTypeToken(t token.Type) bool {
 	return t == token.TYPE_INT || t == token.TYPE_FLOAT ||
 		t == token.TYPE_STRING || t == token.TYPE_BOOL ||
-		t == token.TYPE_ARRAY || t == token.TYPE_DICT || t == token.TYPE_ERROR
+		t == token.TYPE_ARRAY || t == token.TYPE_DICT ||
+		t == token.TYPE_ERROR || t == token.TYPE_BYTE || t == token.TYPE_CHAR
+}
+
+// isFunctionNameToken 允许类型名（错误/字节/字符）作为函数名使用，
+// 例如 SDK 中的 系统.字符(编码点)。
+func isFunctionNameToken(t token.Type) bool {
+	if t == token.IDENT || t == token.SELF {
+		return true
+	}
+	switch t {
+	case token.TYPE_INT, token.TYPE_FLOAT, token.TYPE_STRING, token.TYPE_BOOL,
+		token.TYPE_ARRAY, token.TYPE_DICT, token.TYPE_ERROR,
+		token.TYPE_BYTE, token.TYPE_CHAR:
+		return true
+	}
+	return false
 }

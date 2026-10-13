@@ -12,6 +12,8 @@ const (
 	KindFloat  Kind = "小数"
 	KindString Kind = "字符串"
 	KindBool   Kind = "布尔"
+	KindByte   Kind = "字节"
+	KindChar   Kind = "字符"
 	KindNil    Kind = "空"
 )
 
@@ -36,6 +38,18 @@ type String struct{ Value string }
 
 func (s *String) Kind() Kind      { return KindString }
 func (s *String) Inspect() string { return s.Value }
+
+// Byte 是 0–255 的 8 位无符号整数。
+type Byte struct{ Value byte }
+
+func (b *Byte) Kind() Kind      { return KindByte }
+func (b *Byte) Inspect() string { return strconv.Itoa(int(b.Value)) }
+
+// Char 是单个 Unicode 字符。
+type Char struct{ Value rune }
+
+func (c *Char) Kind() Kind      { return KindChar }
+func (c *Char) Inspect() string { return string(c.Value) }
 
 type Bool struct{ Value bool }
 

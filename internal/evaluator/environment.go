@@ -126,7 +126,8 @@ func (e *Environment) declare(name string, val object.Object, isConst bool, dt a
 	if _, ok := e.store[name]; ok {
 		return fmt.Errorf("变量 %s 已声明", name)
 	}
-	if err := checkDeclType(dt, val); err != nil {
+	val, err := coerceDeclType(dt, val)
+	if err != nil {
 		return err
 	}
 	e.store[name] = &binding{value: val, isConst: isConst, declType: dt}
@@ -141,7 +142,8 @@ func (e *Environment) assign(name string, val object.Object) error {
 	if b.isConst {
 		return fmt.Errorf("常量 %s 不可再赋值", name)
 	}
-	if err := checkDeclType(b.declType, val); err != nil {
+	val, err := coerceDeclType(b.declType, val)
+	if err != nil {
 		return err
 	}
 	b.value = val
@@ -158,6 +160,25 @@ func (e *Environment) get(name string) (object.Object, bool) {
 		return nil, false
 	}
 	return b.value, true
+}
+
+func coerceDeclType(dt ast.DeclType, val object.Object) (object.Object, error) {
+	if dt == ast.TypeByte {
+		if b, ok := val.(*object.Byte); ok {
+			return b, nil
+		}
+		if n, ok := val.(*object.Integer); ok {
+			if n.Value < 0 || n.Value > 255 {
+				return nil, fmt.Errorf("字节超出范围：%d（允许 0–255）", n.Value)
+			}
+			return &object.Byte{Value: byte(n.Value)}, nil
+		}
+		return nil, fmt.Errorf("类型不匹配：声明为 字节，实际为 %s", val.Kind())
+	}
+	if err := checkDeclType(dt, val); err != nil {
+		return nil, err
+	}
+	return val, nil
 }
 
 func checkDeclType(dt ast.DeclType, val object.Object) error {
@@ -183,6 +204,22 @@ func checkDeclType(dt ast.DeclType, val object.Object) error {
 			return nil
 		}
 		want = object.KindError
+	case ast.TypeByte:
+		switch v := val.(type) {
+		case *object.Byte:
+			return nil
+		case *object.Integer:
+			if v.Value < 0 || v.Value > 255 {
+				return fmt.Errorf("字节超出范围：%d（允许 0–255）", v.Value)
+			}
+			return nil
+		}
+		return fmt.Errorf("类型不匹配：声明为 字节，实际为 %s", val.Kind())
+	case ast.TypeChar:
+		if val.Kind() == object.KindChar {
+			return nil
+		}
+		return fmt.Errorf("类型不匹配：声明为 字符，实际为 %s", val.Kind())
 	default:
 		if val.Kind() == object.KindNil {
 			return nil

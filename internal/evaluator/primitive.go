@@ -61,6 +61,10 @@ func runtimeTypeName(value object.Object) string {
 		return "string"
 	case *object.Bool:
 		return "boolean"
+	case *object.Byte:
+		return "byte"
+	case *object.Char:
+		return "char"
 	case *object.Nil:
 		return "nil"
 	case *object.Array:
