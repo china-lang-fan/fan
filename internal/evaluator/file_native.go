@@ -28,7 +28,7 @@ func requireStringArg(name string, args []object.Object, index int) (string, boo
 	return value.Value, true
 }
 
-func nativeFileRead(args []object.Object) ([]object.Object, error) {
+func nativeFileRead(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("readFile", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("readFile 第 1 个参数必须是字符串路径")
@@ -40,7 +40,7 @@ func nativeFileRead(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: string(data)}, object.Null}, nil
 }
 
-func nativeFileWrite(args []object.Object) ([]object.Object, error) {
+func nativeFileWrite(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("writeFile", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("writeFile 第 1 个参数必须是字符串路径")
@@ -53,7 +53,7 @@ func nativeFileWrite(args []object.Object) ([]object.Object, error) {
 	return []object.Object{errObjectOrNull(err)}, nil
 }
 
-func nativeFileAppend(args []object.Object) ([]object.Object, error) {
+func nativeFileAppend(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("appendFile", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("appendFile 第 1 个参数必须是字符串路径")
@@ -70,7 +70,7 @@ func nativeFileAppend(args []object.Object) ([]object.Object, error) {
 	return []object.Object{errObjectOrNull(err)}, nil
 }
 
-func nativeFileRemove(args []object.Object) ([]object.Object, error) {
+func nativeFileRemove(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("remove", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("remove 第 1 个参数必须是字符串路径")
@@ -79,7 +79,7 @@ func nativeFileRemove(args []object.Object) ([]object.Object, error) {
 	return []object.Object{errObjectOrNull(err)}, nil
 }
 
-func nativeFileRemoveAll(args []object.Object) ([]object.Object, error) {
+func nativeFileRemoveAll(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("removeAll", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("removeAll 第 1 个参数必须是字符串路径")
@@ -88,7 +88,7 @@ func nativeFileRemoveAll(args []object.Object) ([]object.Object, error) {
 	return []object.Object{errObjectOrNull(err)}, nil
 }
 
-func nativeFileRename(args []object.Object) ([]object.Object, error) {
+func nativeFileRename(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	oldPath, ok := requireStringArg("rename", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("rename 第 1 个参数必须是字符串路径")
@@ -101,7 +101,7 @@ func nativeFileRename(args []object.Object) ([]object.Object, error) {
 	return []object.Object{errObjectOrNull(err)}, nil
 }
 
-func nativeFileMakeDir(args []object.Object) ([]object.Object, error) {
+func nativeFileMakeDir(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("makeDir", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("makeDir 第 1 个参数必须是字符串路径")
@@ -121,7 +121,7 @@ func nativeFileMakeDir(args []object.Object) ([]object.Object, error) {
 	return []object.Object{errObjectOrNull(err)}, nil
 }
 
-func nativeFileList(args []object.Object) ([]object.Object, error) {
+func nativeFileList(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("listDir", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("listDir 第 1 个参数必须是字符串路径")
@@ -141,7 +141,7 @@ func nativeFileList(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Array{Elements: elements}, object.Null}, nil
 }
 
-func nativeFileStat(args []object.Object) ([]object.Object, error) {
+func nativeFileStat(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("stat", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("stat 第 1 个参数必须是字符串路径")
@@ -162,7 +162,7 @@ func nativeFileStat(args []object.Object) ([]object.Object, error) {
 	return []object.Object{dict, object.Null}, nil
 }
 
-func nativeFileExists(args []object.Object) ([]object.Object, error) {
+func nativeFileExists(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, ok := requireStringArg("exists", args, 0)
 	if !ok {
 		return nil, fmt.Errorf("exists 第 1 个参数必须是字符串路径")
@@ -171,7 +171,7 @@ func nativeFileExists(args []object.Object) ([]object.Object, error) {
 	return []object.Object{object.BoolOf(err == nil)}, nil
 }
 
-func nativeTempDir(args []object.Object) ([]object.Object, error) {
+func nativeTempDir(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	prefix := ""
 	if len(args) > 0 {
 		if value, ok := args[0].(*object.String); ok {
@@ -185,7 +185,7 @@ func nativeTempDir(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: dir}, object.Null}, nil
 }
 
-func nativeTempFile(args []object.Object) ([]object.Object, error) {
+func nativeTempFile(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	prefix := ""
 	if len(args) > 0 {
 		if value, ok := args[0].(*object.String); ok {
@@ -201,11 +201,11 @@ func nativeTempFile(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: path}, object.Null}, nil
 }
 
-func nativePathSeparator(_ []object.Object) ([]object.Object, error) {
+func nativePathSeparator(_ *Runtime, _ []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: string(filepath.Separator)}}, nil
 }
 
-func nativePathBase(args []object.Object) ([]object.Object, error) {
+func nativePathBase(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("pathBase 需要 1 个参数")
 	}
@@ -216,7 +216,7 @@ func nativePathBase(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: filepath.Base(value.Value)}}, nil
 }
 
-func nativePathExt(args []object.Object) ([]object.Object, error) {
+func nativePathExt(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("pathExt 需要 1 个参数")
 	}
@@ -227,7 +227,7 @@ func nativePathExt(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: filepath.Ext(value.Value)}}, nil
 }
 
-func nativePathDir(args []object.Object) ([]object.Object, error) {
+func nativePathDir(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("pathDir 需要 1 个参数")
 	}
@@ -238,7 +238,7 @@ func nativePathDir(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: filepath.Dir(value.Value)}}, nil
 }
 
-func nativePathJoin(args []object.Object) ([]object.Object, error) {
+func nativePathJoin(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	parts := make([]string, 0, len(args))
 	for _, arg := range args {
 		if elements, ok := arg.(*object.Array); ok {
@@ -260,7 +260,7 @@ func nativePathJoin(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: filepath.Join(parts...)}}, nil
 }
 
-func nativeIntToString(args []object.Object) ([]object.Object, error) {
+func nativeIntToString(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("intToString 需要 1 个参数")
 	}

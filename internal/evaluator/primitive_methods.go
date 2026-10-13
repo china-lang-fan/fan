@@ -93,7 +93,7 @@ func evalPrimitiveMethodDef(stmt *ast.MethodDef, env *Environment) (object.Objec
 		Name:        stmt.MethodName,
 		ReturnTypes: stmt.Function.ReturnTypes,
 	}
-	if err := processFunctionTags(fn, stmt.Function.Tags, env); err != nil {
+	if err := processFunctionTags(env.Runtime(), fn, stmt.Function.Tags, env); err != nil {
 		return nil, err
 	}
 	env.primitiveMethods().register(kind, stmt.MethodName, fn)
@@ -122,10 +122,10 @@ func evalImplicitReceiverCallExpr(node *ast.ImplicitReceiverCallExpr, env *Envir
 	args = spreadTuples(args)
 	member := &ast.MemberExpr{Position: node.Position, Object: node.Receiver, Name: node.Name}
 	if fn, err := resolveMemberFunction(receiver, member, env); err == nil {
-		return callResolvedMemberFunction(fn, receiver, args, node.Position)
+		return callResolvedMemberFunction(env.Runtime(), fn, receiver, args, node.Position)
 	}
 	if fn, ok := env.get(node.Name); ok {
-		return callResolvedValue(fn, append([]object.Object{receiver}, args...), node.Position)
+		return callResolvedValue(env.Runtime(), fn, append([]object.Object{receiver}, args...), node.Position)
 	}
 	return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("函数或方法 %s 未定义", node.Name)}
 }
@@ -150,7 +150,7 @@ func resolveMemberFunction(value object.Object, member *ast.MemberExpr, env *Env
 	return evalFieldAccess(member, env, value)
 }
 
-func callResolvedMemberFunction(callee object.Object, receiver object.Object, args []object.Object, pos ast.Position) (object.Object, error) {
+func callResolvedMemberFunction(rt *Runtime, callee object.Object, receiver object.Object, args []object.Object, pos ast.Position) (object.Object, error) {
 	switch fn := callee.(type) {
 	case *Function:
 		if fn.Self != nil {
@@ -158,7 +158,7 @@ func callResolvedMemberFunction(callee object.Object, receiver object.Object, ar
 		}
 		return applyFunction(fn, append([]object.Object{receiver}, args...), pos)
 	case *Class:
-		return fn.instantiate(pos, args)
+		return fn.instantiate(rt, pos, args)
 	}
 	if len(args) == 0 {
 		return callee, nil
@@ -166,12 +166,12 @@ func callResolvedMemberFunction(callee object.Object, receiver object.Object, ar
 	return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("%s 不是可调用对象", callee.Kind())}
 }
 
-func callResolvedValue(callee object.Object, args []object.Object, pos ast.Position) (object.Object, error) {
+func callResolvedValue(rt *Runtime, callee object.Object, args []object.Object, pos ast.Position) (object.Object, error) {
 	switch fn := callee.(type) {
 	case *Function:
 		return applyFunction(fn, args, pos)
 	case *Class:
-		return fn.instantiate(pos, args)
+		return fn.instantiate(rt, pos, args)
 	}
 	return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("%s 不是可调用对象", callee.Kind())}
 }

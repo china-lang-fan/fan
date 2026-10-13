@@ -156,11 +156,7 @@ func TestBuiltinAppendDoesNotMutate(t *testing.T) {
 
 func TestBuiltinPrint(t *testing.T) {
 	var buf bytes.Buffer
-	old := Stdout
-	Stdout = &buf
-	defer func() { Stdout = old }()
-
-	if _, err := runSource(t, `打印([1, "二", 真])`); err != nil {
+	if _, _, err := runSourceWithOutput(t, `打印([1, "二", 真])`, &buf); err != nil {
 		t.Fatalf("运行错误：%v", err)
 	}
 	if got := buf.String(); got != "[1, 二, 真]\n" {
@@ -170,11 +166,7 @@ func TestBuiltinPrint(t *testing.T) {
 
 func TestBuiltinPrintMultipleArgs(t *testing.T) {
 	var buf bytes.Buffer
-	old := Stdout
-	Stdout = &buf
-	defer func() { Stdout = old }()
-
-	if _, err := runSource(t, `打印(1, "甲", 真)`); err != nil {
+	if _, _, err := runSourceWithOutput(t, `打印(1, "甲", 真)`, &buf); err != nil {
 		t.Fatalf("运行错误：%v", err)
 	}
 	if got := buf.String(); got != "1 甲 真\n" {

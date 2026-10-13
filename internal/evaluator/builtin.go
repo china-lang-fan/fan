@@ -3,7 +3,6 @@ package evaluator
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"fan/internal/ast"
@@ -11,23 +10,45 @@ import (
 	"fan/internal/tagsys"
 )
 
-var Stdout io.Writer = os.Stdout
-
 type builtinFn func(pos ast.Position, args []object.Object) (object.Object, error)
 
 var builtins = map[string]builtinFn{
 	"长度":     builtinLength,
 	"追加":     builtinAppend,
-	"打印":     builtinPrint,
+	"打印":     nil,
 	"错误":     builtinError,
-	"注册标签处理": builtinRegisterTagHandler,
-	"print":  builtinPrint,
+	"注册标签处理": nil,
+	"print":  nil,
 	"error":  builtinError,
 	"type":   builtinType,
 	"trunc":  builtinTrunc,
 	"ord":    builtinOrd,
 	"char":   builtinChar,
 	"fail":   builtinFail,
+}
+
+// runtimeBuiltin 处理需要访问运行实例的内建函数（打印/注册标签处理）。
+func runtimeBuiltin(rt *Runtime, name string, pos ast.Position, args []object.Object) (object.Object, bool, error) {
+	switch name {
+	case "打印", "print":
+		writeObjects(rt.Stdout(), args)
+		return object.Null, true, nil
+	case "注册标签处理":
+		if len(args) != 2 {
+			return nil, true, &EvalError{Pos: pos, Reason: "注册标签处理 需要 2 个参数"}
+		}
+		tagName, ok := args[0].(*object.String)
+		if !ok {
+			return nil, true, &EvalError{Pos: pos, Reason: "标签名必须是字符串"}
+		}
+		fn, ok := args[1].(*Function)
+		if !ok {
+			return nil, true, &EvalError{Pos: pos, Reason: "标签处理器必须是函数"}
+		}
+		rt.registerFanTagHandler(tagName.Value, fn)
+		return object.Null, true, nil
+	}
+	return nil, false, nil
 }
 
 func IsBuiltin(name string) bool {
@@ -64,25 +85,37 @@ func builtinAppend(pos ast.Position, args []object.Object) (object.Object, error
 	return &object.Array{Elements: elems}, nil
 }
 
-func printObjects(args []object.Object) {
+// writeObjects 将对象按空格连接并输出一行。
+func writeObjects(w io.Writer, args []object.Object) {
 	parts := make([]string, 0, len(args))
 	for _, a := range args {
 		parts = append(parts, object.Format(a))
 	}
-	fmt.Fprintln(Stdout, strings.Join(parts, " "))
-}
-
-func builtinPrint(pos ast.Position, args []object.Object) (object.Object, error) {
-	printObjects(args)
-	return object.Null, nil
+	fmt.Fprintln(w, strings.Join(parts, " "))
 }
 
 func builtinError(pos ast.Position, args []object.Object) (object.Object, error) {
 	if len(args) == 0 {
 		return object.NewError(""), nil
 	}
-	msg := object.Format(args[0])
-	return object.NewError(msg), nil
+	e := object.NewError(object.Format(args[0]))
+	if len(args) >= 2 {
+		if code, ok := args[1].(*object.String); ok {
+			e.Code = code.Value
+		} else if args[1] != object.Null {
+			return nil, &EvalError{Pos: pos, Reason: "错误 的第 2 个参数（错误码）必须是字符串"}
+		}
+	}
+	if len(args) >= 3 {
+		switch details := args[2].(type) {
+		case *object.Dict:
+			e.Details = details
+		case *object.Nil:
+		default:
+			return nil, &EvalError{Pos: pos, Reason: "错误 的第 3 个参数（详情）必须是字典"}
+		}
+	}
+	return e, nil
 }
 
 func builtinFail(pos ast.Position, args []object.Object) (object.Object, error) {
@@ -90,22 +123,6 @@ func builtinFail(pos ast.Position, args []object.Object) (object.Object, error) 
 		return nil, &EvalError{Pos: pos, Reason: "断言失败"}
 	}
 	return nil, &EvalError{Pos: pos, Reason: object.Format(args[0])}
-}
-
-func builtinRegisterTagHandler(pos ast.Position, args []object.Object) (object.Object, error) {
-	if len(args) != 2 {
-		return nil, &EvalError{Pos: pos, Reason: "注册标签处理 需要 2 个参数"}
-	}
-	name, ok := args[0].(*object.String)
-	if !ok {
-		return nil, &EvalError{Pos: pos, Reason: "标签名必须是字符串"}
-	}
-	fn, ok := args[1].(*Function)
-	if !ok {
-		return nil, &EvalError{Pos: pos, Reason: "标签处理器必须是函数"}
-	}
-	registerFanTagHandler(name.Value, fn)
-	return object.Null, nil
 }
 
 func spreadTuples(args []object.Object) []object.Object {
@@ -147,6 +164,9 @@ func evalCallExpr(node *ast.CallExpr, env *Environment) (object.Object, error) {
 		args = append(args, val)
 	}
 	args = spreadTuples(args)
+	if value, handled, err := runtimeBuiltin(env.Runtime(), ident.Name, node.Position, args); handled {
+		return value, err
+	}
 	if fn, ok := builtins[ident.Name]; ok {
 		return fn(node.Position, args)
 	}
@@ -158,7 +178,7 @@ func evalCallExpr(node *ast.CallExpr, env *Environment) (object.Object, error) {
 	case *Function:
 		return applyFunction(callable, args, node.Position)
 	case *Class:
-		return callable.instantiate(node.Position, args)
+		return callable.instantiate(env.Runtime(), node.Position, args)
 	case tagsys.Callable:
 		return callTagsysCallable(callable, args, node.Position)
 	}

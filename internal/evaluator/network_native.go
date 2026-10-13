@@ -95,7 +95,7 @@ func failedHTTPResponse() *object.Dict {
 	return result
 }
 
-func nativeHTTPRequest(args []object.Object) ([]object.Object, error) {
+func nativeHTTPRequest(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) < 2 {
 		return nil, fmt.Errorf("httpRequest 至少需要 2 个参数")
 	}

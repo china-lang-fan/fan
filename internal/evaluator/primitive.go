@@ -11,7 +11,7 @@ import (
 )
 
 func nativeFromBuiltin(fn builtinFn) NativeFunction {
-	return func(args []object.Object) ([]object.Object, error) {
+	return func(_ *Runtime, args []object.Object) ([]object.Object, error) {
 		value, err := fn(ast.Position{}, args)
 		if err != nil {
 			return nil, err

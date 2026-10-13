@@ -52,7 +52,7 @@ func stringArray(values []string) *object.Array {
 	return &object.Array{Elements: elements}
 }
 
-func nativeRegexMatch(args []object.Object) ([]object.Object, error) {
+func nativeRegexMatch(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	pattern, err := compileRegexPattern(args, 2, "regexMatch")
 	if err != nil {
 		return []object.Object{object.False, object.NewError(err.Error())}, nil
@@ -64,7 +64,7 @@ func nativeRegexMatch(args []object.Object) ([]object.Object, error) {
 	return []object.Object{object.BoolOf(pattern.MatchString(text)), object.Null}, nil
 }
 
-func nativeRegexFind(args []object.Object) ([]object.Object, error) {
+func nativeRegexFind(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	pattern, err := compileRegexPattern(args, 2, "regexFind")
 	if err != nil {
 		return []object.Object{&object.String{Value: ""}, object.NewError(err.Error())}, nil
@@ -76,7 +76,7 @@ func nativeRegexFind(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: pattern.FindString(text)}, object.Null}, nil
 }
 
-func nativeRegexFindAll(args []object.Object) ([]object.Object, error) {
+func nativeRegexFindAll(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	pattern, err := compileRegexPattern(args, 2, "regexFindAll")
 	if err != nil {
 		return []object.Object{&object.Array{}, object.NewError(err.Error())}, nil
@@ -108,7 +108,7 @@ func matchGroups(pattern *regexp.Regexp, text string) []object.Object {
 	return groups
 }
 
-func nativeRegexFindGroups(args []object.Object) ([]object.Object, error) {
+func nativeRegexFindGroups(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	pattern, err := compileRegexPattern(args, 2, "regexFindGroups")
 	if err != nil {
 		return []object.Object{&object.Array{}, object.NewError(err.Error())}, nil
@@ -120,7 +120,7 @@ func nativeRegexFindGroups(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Array{Elements: matchGroups(pattern, text)}, object.Null}, nil
 }
 
-func nativeRegexFindAllGroups(args []object.Object) ([]object.Object, error) {
+func nativeRegexFindAllGroups(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	pattern, err := compileRegexPattern(args, 2, "regexFindAllGroups")
 	if err != nil {
 		return []object.Object{&object.Array{}, object.NewError(err.Error())}, nil
@@ -149,7 +149,7 @@ func nativeRegexFindAllGroups(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Array{Elements: results}, object.Null}, nil
 }
 
-func nativeRegexReplace(args []object.Object) ([]object.Object, error) {
+func nativeRegexReplace(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	pattern, err := compileRegexPattern(args, 3, "regexReplace")
 	if err != nil {
 		return []object.Object{&object.String{Value: ""}, object.NewError(err.Error())}, nil
@@ -178,7 +178,7 @@ func nativeRegexReplace(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: string(output)}, object.Null}, nil
 }
 
-func nativeRegexSplit(args []object.Object) ([]object.Object, error) {
+func nativeRegexSplit(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	pattern, err := compileRegexPattern(args, 2, "regexSplit")
 	if err != nil {
 		return []object.Object{&object.Array{}, object.NewError(err.Error())}, nil
@@ -194,7 +194,7 @@ func nativeRegexSplit(args []object.Object) ([]object.Object, error) {
 	return []object.Object{stringArray(pattern.Split(text, limit)), object.Null}, nil
 }
 
-func nativeRegexQuote(args []object.Object) ([]object.Object, error) {
+func nativeRegexQuote(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	text, err := regexTextArg(args, 0, "regexQuote")
 	if err != nil {
 		return nil, err

@@ -70,7 +70,7 @@ func evalFunctionLiteral(node *ast.FunctionLiteral, env *Environment) (object.Ob
 		GroupSizes:   node.GroupSizes,
 		Signature:    node.Signature,
 	}
-	if err := processFunctionTags(fn, node.Tags, env); err != nil {
+	if err := processFunctionTags(env.Runtime(), fn, node.Tags, env); err != nil {
 		return nil, err
 	}
 	return fn, nil
@@ -141,7 +141,7 @@ func (f *Function) Call(args []tagsys.Object) ([]tagsys.Object, error) {
 		}
 		callArgs[i] = value
 	}
-	result, err := applyFunction(f, callArgs, ast.Position{})
+	result, err := applyFunctionWithPanic(f.Env.Runtime(), f, callArgs, ast.Position{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -174,10 +174,10 @@ func callImpl(impl tagsys.Callable, args []tagsys.Object, pos ast.Position, retu
 }
 
 func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object.Object, error) {
-	return applyFunctionWithPanic(fn, args, pos, nil)
+	return applyFunctionWithPanic(fn.Env.Runtime(), fn, args, pos, nil)
 }
 
-func applyFunctionWithPanic(fn *Function, args []object.Object, pos ast.Position, inherited *panicSignal) (object.Object, error) {
+func applyFunctionWithPanic(rt *Runtime, fn *Function, args []object.Object, pos ast.Position, inherited *panicSignal) (object.Object, error) {
 	values, err := bindArguments(fn, args, pos)
 	if err != nil {
 		return nil, err
@@ -201,13 +201,22 @@ func applyFunctionWithPanic(fn *Function, args []object.Object, pos ast.Position
 		}
 		return callImpl(fn.MethodImpl, callArgs, pos, fn.ReturnTypes)
 	}
-	frame := pushFrame()
+	frame := rt.pushFrame()
 	frame.panic = inherited
-	defer popFrame()
-	return applyFunctionBodyWithFrame(fn, values, pos, frame)
+	defer rt.popFrame()
+	rt.pushFn(functionDisplayName(fn), pos)
+	defer rt.popFn()
+	return applyFunctionBodyWithFrame(rt, fn, values, pos, frame)
 }
 
-func applyFunctionBodyWithFrame(fn *Function, values []object.Object, pos ast.Position, frame *callFrame) (object.Object, error) {
+func functionDisplayName(fn *Function) string {
+	if fn.Name != "" {
+		return fn.Name
+	}
+	return "<匿名函数>"
+}
+
+func applyFunctionBodyWithFrame(rt *Runtime, fn *Function, values []object.Object, pos ast.Position, frame *callFrame) (object.Object, error) {
 	env := NewEnclosedEnvironment(fn.Env)
 	for i, param := range fn.Params {
 		if param.Variadic {
@@ -229,6 +238,9 @@ func applyFunctionBodyWithFrame(fn *Function, values []object.Object, pos ast.Po
 		if sig, ok := err.(*returnSignal); ok {
 			resultValues = sig.values
 		} else if cs, ok := err.(*checkSignal); ok {
+			if len(cs.err.Stack) == 0 {
+				cs.err.Stack = rt.Stack()
+			}
 			resultValues, err = fn.checkReturn(cs.err)
 			if err != nil {
 				return nil, err
@@ -237,14 +249,14 @@ func applyFunctionBodyWithFrame(fn *Function, values []object.Object, pos ast.Po
 			if coerceErr != nil {
 				return nil, coerceErr
 			}
-			deferErr := runDefers(frame)
+			deferErr := runDefers(rt, frame)
 			if deferErr != nil {
 				return nil, deferErr
 			}
 			return coerced, nil
 		} else if panicErr, ok := err.(*panicSignal); ok {
 			frame.panic = panicErr
-			deferErr := runDefers(frame)
+			deferErr := runDefers(rt, frame)
 			if deferErr != nil {
 				return nil, deferErr
 			}
@@ -253,7 +265,7 @@ func applyFunctionBodyWithFrame(fn *Function, values []object.Object, pos ast.Po
 			}
 			return nil, frame.panic
 		} else {
-			deferErr := runDefers(frame)
+			deferErr := runDefers(rt, frame)
 			if deferErr != nil {
 				return nil, deferErr
 			}
@@ -269,7 +281,7 @@ func applyFunctionBodyWithFrame(fn *Function, values []object.Object, pos ast.Po
 	if coerceErr != nil {
 		return nil, coerceErr
 	}
-	if deferErr := runDefers(frame); deferErr != nil {
+	if deferErr := runDefers(rt, frame); deferErr != nil {
 		if frame.panic == nil {
 			return nil, deferErr
 		}

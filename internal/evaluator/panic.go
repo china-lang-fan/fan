@@ -28,33 +28,12 @@ type callFrame struct {
 	panic  *panicSignal
 }
 
-var frameStack []*callFrame
-
-func pushFrame() *callFrame {
-	frame := &callFrame{}
-	frameStack = append(frameStack, frame)
-	return frame
-}
-
-func popFrame() {
-	if len(frameStack) > 0 {
-		frameStack = frameStack[:len(frameStack)-1]
-	}
-}
-
-func currentFrame() *callFrame {
-	if len(frameStack) == 0 {
-		return nil
-	}
-	return frameStack[len(frameStack)-1]
-}
-
-func evalDeferStmt(stmt *ast.DeferStmt, env *Environment) (object.Object, error) {
-	frame := currentFrame()
+func evalDeferStmt(rt *Runtime, stmt *ast.DeferStmt, env *Environment) (object.Object, error) {
+	frame := rt.currentFrame()
 	if frame == nil {
 		return nil, &EvalError{Pos: stmt.Position, Reason: "稍后 只能在函数或脚本作用域中使用"}
 	}
-	call, err := prepareDeferredCall(stmt.Call, env, stmt.Position)
+	call, err := prepareDeferredCall(rt, stmt.Call, env, stmt.Position)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +41,7 @@ func evalDeferStmt(stmt *ast.DeferStmt, env *Environment) (object.Object, error)
 	return object.Null, nil
 }
 
-func prepareDeferredCall(expr ast.Expression, env *Environment, pos ast.Position) (deferredCall, error) {
+func prepareDeferredCall(rt *Runtime, expr ast.Expression, env *Environment, pos ast.Position) (deferredCall, error) {
 	switch node := expr.(type) {
 	case *ast.FunctionLiteral:
 		fn, err := Eval(node, env)
@@ -71,13 +50,13 @@ func prepareDeferredCall(expr ast.Expression, env *Environment, pos ast.Position
 		}
 		return deferredCall{callable: fn, args: nil, pos: pos}, nil
 	case *ast.CallExpr:
-		return prepareDeferredValueCall(node, env)
+		return prepareDeferredValueCall(rt, node, env)
 	default:
 		return deferredCall{}, &EvalError{Pos: pos, Reason: "稍后 后必须是函数调用或无参函数"}
 	}
 }
 
-func prepareDeferredValueCall(node *ast.CallExpr, env *Environment) (deferredCall, error) {
+func prepareDeferredValueCall(rt *Runtime, node *ast.CallExpr, env *Environment) (deferredCall, error) {
 	var callable object.Object
 	switch callee := node.Callee.(type) {
 	case *ast.Identifier:
@@ -135,13 +114,16 @@ func evalThrowStmt(stmt *ast.ThrowStmt, env *Environment) (object.Object, error)
 	if value == nil {
 		value = object.Null
 	}
+	if e, ok := value.(*object.Error); ok && len(e.Stack) == 0 {
+		e.Stack = env.Runtime().Stack()
+	}
 	return nil, &panicSignal{value: value}
 }
 
-func runDefers(frame *callFrame) error {
+func runDefers(rt *Runtime, frame *callFrame) error {
 	var regularErr error
 	for i := len(frame.defers) - 1; i >= 0; i-- {
-		err := invokeDeferredCall(frame, frame.defers[i])
+		err := invokeDeferredCall(rt, frame, frame.defers[i])
 		if panicErr, ok := err.(*panicSignal); ok {
 			frame.panic = panicErr
 			regularErr = nil
@@ -157,31 +139,31 @@ func runDefers(frame *callFrame) error {
 	return regularErr
 }
 
-func invokeDeferredCall(parent *callFrame, call deferredCall) error {
+func invokeDeferredCall(rt *Runtime, parent *callFrame, call deferredCall) error {
 	if call.builtin != nil {
 		_, err := call.builtin(call.pos, call.args)
 		return err
 	}
 	if fn, ok := call.callable.(*Function); ok {
-		frame := pushFrame()
+		frame := rt.pushFrame()
 		frame.panic = parent.panic
-		defer popFrame()
+		defer rt.popFrame()
 		values, err := bindArguments(fn, call.args, call.pos)
 		if err != nil {
 			return err
 		}
-		_, err = applyFunctionBodyWithFrame(fn, values, call.pos, frame)
+		_, err = applyFunctionBodyWithFrame(rt, fn, values, call.pos, frame)
 		parent.panic = frame.panic
 		return err
 	}
-	_, err := applyCallableWithPanic(call.callable, call.args, call.pos, parent.panic)
+	_, err := applyCallableWithPanic(rt, call.callable, call.args, call.pos, parent.panic)
 	return err
 }
 
-func applyCallableWithPanic(callable object.Object, args []object.Object, pos ast.Position, inherited *panicSignal) (object.Object, error) {
+func applyCallableWithPanic(rt *Runtime, callable object.Object, args []object.Object, pos ast.Position, inherited *panicSignal) (object.Object, error) {
 	switch fn := callable.(type) {
 	case *Class:
-		return fn.instantiate(pos, args)
+		return fn.instantiate(rt, pos, args)
 	case tagsys.Callable:
 		return callTagsysCallable(fn, args, pos)
 	default:
@@ -189,8 +171,8 @@ func applyCallableWithPanic(callable object.Object, args []object.Object, pos as
 	}
 }
 
-func evalRecover() object.Object {
-	frame := currentFrame()
+func evalRecover(rt *Runtime) object.Object {
+	frame := rt.currentFrame()
 	if frame == nil || frame.panic == nil {
 		return object.Null
 	}

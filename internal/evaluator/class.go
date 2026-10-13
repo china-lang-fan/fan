@@ -63,7 +63,7 @@ func evalClassStmt(stmt *ast.ClassStmt, env *Environment) (object.Object, error)
 		}
 		cls.Embeds = append(cls.Embeds, embedCls)
 	}
-	if err := processClassTags(cls, stmt.Tags, env); err != nil {
+	if err := processClassTags(env.Runtime(), cls, stmt.Tags, env); err != nil {
 		return nil, err
 	}
 	if existing, ok := env.get(stmt.Name); ok {
@@ -102,14 +102,17 @@ func evalMethodDef(stmt *ast.MethodDef, env *Environment) (object.Object, error)
 		ReturnTypes: stmt.Function.ReturnTypes,
 		Owner:       cls,
 	}
-	if err := processFunctionTags(fn, stmt.Function.Tags, env); err != nil {
+	if err := processFunctionTags(env.Runtime(), fn, stmt.Function.Tags, env); err != nil {
 		return nil, err
 	}
 	cls.Methods[stmt.MethodName] = fn
 	return object.Null, nil
 }
 
-func (c *Class) instantiate(pos ast.Position, args []object.Object) (*Instance, error) {
+func (c *Class) instantiate(rt *Runtime, pos ast.Position, args []object.Object) (*Instance, error) {
+	if rt == nil && c.Parent != nil {
+		rt = c.Parent.Runtime()
+	}
 	if c.Impl != nil {
 		callArgs := make([]tagsys.Object, len(args))
 		for i, arg := range args {
@@ -150,10 +153,23 @@ func (c *Class) instantiate(pos ast.Position, args []object.Object) (*Instance, 
 		return inst, nil
 	}
 	bound := initFn.bind(inst)
-	if _, err := applyFunction(bound, args, pos); err != nil {
+	if _, err := applyFunctionWithPanic(rt, bound, args, pos, nil); err != nil {
 		return nil, err
 	}
 	return inst, nil
+}
+
+func errorStackToArray(frames []object.StackFrame) *object.Array {
+	elements := make([]object.Object, 0, len(frames))
+	for _, f := range frames {
+		d := object.NewDict()
+		d.Set(&object.String{Value: "函数"}, &object.String{Value: f.Function})
+		d.Set(&object.String{Value: "文件"}, &object.String{Value: f.File})
+		d.Set(&object.String{Value: "行"}, &object.Integer{Value: int64(f.Line)})
+		d.Set(&object.String{Value: "列"}, &object.Integer{Value: int64(f.Column)})
+		elements = append(elements, d)
+	}
+	return &object.Array{Elements: elements}
 }
 
 func (c *Class) lookupMethod(name string) *Function {
@@ -237,6 +253,22 @@ func evalFieldAccess(node *ast.MemberExpr, env *Environment, obj object.Object) 
 		switch node.Name {
 		case "消息":
 			return &object.String{Value: target.Message}, nil
+		case "错误码", "码":
+			return &object.String{Value: target.Code}, nil
+		case "详情":
+			if target.Details != nil {
+				return target.Details, nil
+			}
+			return object.NewDict(), nil
+		case "原因":
+			if target.Cause != nil {
+				return target.Cause, nil
+			}
+			return object.Null, nil
+		case "调用栈":
+			return errorStackToArray(target.Stack), nil
+		case "追踪":
+			return &object.String{Value: target.Trace()}, nil
 		}
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("错误 没有成员 %s", node.Name)}
 	case *runtimeTagContext:

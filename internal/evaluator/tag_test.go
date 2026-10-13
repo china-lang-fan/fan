@@ -22,16 +22,12 @@ func TestBuiltinTagReplacesImplementation(t *testing.T) {
 
 func TestBuiltinTagPrintArray(t *testing.T) {
 	var buf bytes.Buffer
-	old := Stdout
-	Stdout = &buf
-	defer func() { Stdout = old }()
-
 	src := `@内建("打印")
 定义 函数 输出(内容...)
     返回 空
 结束
 输出([1, 2, 3])`
-	if _, err := runSource(t, src); err != nil {
+	if _, _, err := runSourceWithOutput(t, src, &buf); err != nil {
 		t.Fatalf("运行错误：%v", err)
 	}
 	if buf.String() != "1 2 3\n" {
@@ -78,16 +74,12 @@ func TestUnknownBuiltinFunction(t *testing.T) {
 
 func TestBuiltinTagPrint(t *testing.T) {
 	var buf bytes.Buffer
-	old := Stdout
-	Stdout = &buf
-	defer func() { Stdout = old }()
-
 	src := `@内建("打印")
 定义 函数 输出(内容...)
     返回 空
 结束
 输出("你好，", "凡")`
-	if _, err := runSource(t, src); err != nil {
+	if _, _, err := runSourceWithOutput(t, src, &buf); err != nil {
 		t.Fatalf("运行错误：%v", err)
 	}
 	if buf.String() != "你好， 凡\n" {
@@ -239,10 +231,6 @@ func TestFanMethodHandlerReceivesInstance(t *testing.T) {
 
 func TestFanTagHandlerReadsCurrentCallable(t *testing.T) {
 	var buf bytes.Buffer
-	old := Stdout
-	Stdout = &buf
-	defer func() { Stdout = old }()
-
 	src := `模型 自定义
     变量 值
 结束
@@ -256,7 +244,7 @@ func TestFanTagHandlerReadsCurrentCallable(t *testing.T) {
     返回 空
 结束
 测试()`
-	if _, err := runSource(t, src); err != nil {
+	if _, _, err := runSourceWithOutput(t, src, &buf); err != nil {
 		t.Fatalf("运行错误：%v", err)
 	}
 	if buf.String() != "<函数 测试>\n" {

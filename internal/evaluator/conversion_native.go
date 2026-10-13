@@ -8,7 +8,7 @@ import (
 	"fan/internal/object"
 )
 
-func nativeParseInt(args []object.Object) ([]object.Object, error) {
+func nativeParseInt(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("parseInt 需要 1 个参数")
 	}
@@ -23,7 +23,7 @@ func nativeParseInt(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Integer{Value: number}, object.Null}, nil
 }
 
-func nativeParseFloat(args []object.Object) ([]object.Object, error) {
+func nativeParseFloat(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("parseFloat 需要 1 个参数")
 	}
@@ -38,7 +38,7 @@ func nativeParseFloat(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Float{Value: number}, object.Null}, nil
 }
 
-func nativeFloatToString(args []object.Object) ([]object.Object, error) {
+func nativeFloatToString(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("floatToString 需要 1 个参数")
 	}
@@ -49,7 +49,7 @@ func nativeFloatToString(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: strconv.FormatFloat(value, 'g', -1, 64)}}, nil
 }
 
-func nativeParseBool(args []object.Object) ([]object.Object, error) {
+func nativeParseBool(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("parseBool 需要 1 个参数")
 	}

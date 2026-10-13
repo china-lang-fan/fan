@@ -7,15 +7,15 @@ import (
 	"fan/internal/object"
 )
 
-func nativeNowUnix(_ []object.Object) ([]object.Object, error) {
+func nativeNowUnix(_ *Runtime, _ []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Integer{Value: time.Now().Unix()}}, nil
 }
 
-func nativeNowUnixMilli(_ []object.Object) ([]object.Object, error) {
+func nativeNowUnixMilli(_ *Runtime, _ []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Integer{Value: time.Now().UnixMilli()}}, nil
 }
 
-func nativeFormatTime(args []object.Object) ([]object.Object, error) {
+func nativeFormatTime(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("formatTime 需要 2 个参数")
 	}
@@ -31,7 +31,7 @@ func nativeFormatTime(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: t.Format(layout.Value)}}, nil
 }
 
-func nativeParseTime(args []object.Object) ([]object.Object, error) {
+func nativeParseTime(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("parseTime 需要 2 个参数")
 	}
@@ -50,7 +50,7 @@ func nativeParseTime(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Integer{Value: t.Unix()}, object.Null}, nil
 }
 
-func nativeSleep(args []object.Object) ([]object.Object, error) {
+func nativeSleep(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("sleep 需要 1 个参数")
 	}
@@ -62,7 +62,7 @@ func nativeSleep(args []object.Object) ([]object.Object, error) {
 	return []object.Object{object.Null}, nil
 }
 
-func nativeTimeParts(args []object.Object) ([]object.Object, error) {
+func nativeTimeParts(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("timeParts 需要 1 个参数")
 	}

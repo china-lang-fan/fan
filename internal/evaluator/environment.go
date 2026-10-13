@@ -17,6 +17,7 @@ type binding struct {
 type Environment struct {
 	store             map[string]*binding
 	outer             *Environment
+	rt                *Runtime
 	BaseDir           string
 	Loader            *Loader
 	moduleExport      bool
@@ -24,12 +25,35 @@ type Environment struct {
 	mixfixRegistry    *mixfixFunctionRegistry
 }
 
+// NewEnvironment 创建一个绑定到新运行实例的根环境。
 func NewEnvironment() *Environment {
+	rt := NewRuntime()
+	return newEnvironment(rt)
+}
+
+func newEnvironment(rt *Runtime) *Environment {
 	return &Environment{
 		store:             map[string]*binding{},
+		rt:                rt,
 		primitiveRegistry: newPrimitiveMethodRegistry(),
 		mixfixRegistry:    newMixfixFunctionRegistry(),
 	}
+}
+
+// NewEnvironmentForRuntime 创建绑定到指定运行实例的根环境。
+func NewEnvironmentForRuntime(rt *Runtime) *Environment {
+	return newEnvironment(rt)
+}
+
+// Runtime 返回环境所属的运行实例（沿外层链查找）。
+func (e *Environment) Runtime() *Runtime {
+	if e.rt != nil {
+		return e.rt
+	}
+	if e.outer != nil {
+		return e.outer.Runtime()
+	}
+	return nil
 }
 
 func (e *Environment) SetBaseDir(dir string) {
@@ -39,6 +63,11 @@ func (e *Environment) SetBaseDir(dir string) {
 func (e *Environment) SetLoader(l *Loader) {
 	e.Loader = l
 	if l != nil {
+		if l.rt == nil {
+			l.rt = e.Runtime()
+		} else if e.rt == nil {
+			e.rt = l.rt
+		}
 		if l.primitiveRegistry == nil {
 			l.primitiveRegistry = e.primitiveMethods()
 		} else {
@@ -56,6 +85,7 @@ func NewEnclosedEnvironment(outer *Environment) *Environment {
 	return &Environment{
 		store:        map[string]*binding{},
 		outer:        outer,
+		rt:           outer.Runtime(),
 		BaseDir:      outer.BaseDir,
 		Loader:       outer.Loader,
 		moduleExport: outer.moduleExport,

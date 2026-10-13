@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"fan/internal/object"
 )
@@ -16,32 +15,10 @@ type processContext struct {
 	args       []string
 }
 
-var (
-	processStateMu        sync.RWMutex
-	currentProcessContext = processContext{args: []string{}}
-)
-
-func SetProcessContext(scriptPath string, args []string) {
-	copied := make([]string, len(args))
-	copy(copied, args)
-	processStateMu.Lock()
-	currentProcessContext = processContext{scriptPath: scriptPath, args: copied}
-	processStateMu.Unlock()
-}
-
-func ResetProcessContext() {
-	processStateMu.Lock()
-	currentProcessContext = processContext{args: []string{}}
-	processStateMu.Unlock()
-}
-
-func getProcessContext() processContext {
-	processStateMu.RLock()
-	defer processStateMu.RUnlock()
-	args := make([]string, len(currentProcessContext.args))
-	copy(args, currentProcessContext.args)
-	return processContext{scriptPath: currentProcessContext.scriptPath, args: args}
-}
+// SetProcessContext / ResetProcessContext 已废弃，保留空实现以兼容旧调用方。
+// 新代码应使用 Runtime.SetProcessContext。
+func SetProcessContext(scriptPath string, args []string) {}
+func ResetProcessContext()                               {}
 
 func requireProcessString(name string, args []object.Object, index int) (string, error) {
 	if len(args) <= index {
@@ -73,8 +50,8 @@ func optionString(options object.Object, key string) (string, bool, error) {
 	return text.Value, true, nil
 }
 
-func nativeProcessArgs(_ []object.Object) ([]object.Object, error) {
-	ctx := getProcessContext()
+func nativeProcessArgs(rt *Runtime, _ []object.Object) ([]object.Object, error) {
+	ctx := rt.processContext()
 	elements := make([]object.Object, 0, len(ctx.args))
 	for _, arg := range ctx.args {
 		elements = append(elements, &object.String{Value: arg})
@@ -82,11 +59,11 @@ func nativeProcessArgs(_ []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Array{Elements: elements}}, nil
 }
 
-func nativeProcessScript(_ []object.Object) ([]object.Object, error) {
-	return []object.Object{&object.String{Value: getProcessContext().scriptPath}}, nil
+func nativeProcessScript(rt *Runtime, _ []object.Object) ([]object.Object, error) {
+	return []object.Object{&object.String{Value: rt.processContext().scriptPath}}, nil
 }
 
-func nativeProcessEnv(args []object.Object) ([]object.Object, error) {
+func nativeProcessEnv(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	name, err := requireProcessString("env", args, 0)
 	if err != nil {
 		return nil, err
@@ -95,7 +72,7 @@ func nativeProcessEnv(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: value}}, nil
 }
 
-func nativeProcessSetEnv(args []object.Object) ([]object.Object, error) {
+func nativeProcessSetEnv(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	name, err := requireProcessString("setEnv", args, 0)
 	if err != nil {
 		return nil, err
@@ -110,7 +87,7 @@ func nativeProcessSetEnv(args []object.Object) ([]object.Object, error) {
 	return []object.Object{object.Null}, nil
 }
 
-func nativeProcessWorkingDir(_ []object.Object) ([]object.Object, error) {
+func nativeProcessWorkingDir(_ *Runtime, _ []object.Object) ([]object.Object, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return []object.Object{&object.String{Value: ""}, object.NewError(err.Error())}, nil
@@ -118,7 +95,7 @@ func nativeProcessWorkingDir(_ []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: dir}}, nil
 }
 
-func nativeProcessChangeDir(args []object.Object) ([]object.Object, error) {
+func nativeProcessChangeDir(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	path, err := requireProcessString("changeDir", args, 0)
 	if err != nil {
 		return nil, err
@@ -129,11 +106,11 @@ func nativeProcessChangeDir(args []object.Object) ([]object.Object, error) {
 	return []object.Object{object.Null}, nil
 }
 
-func nativeProcessPID(_ []object.Object) ([]object.Object, error) {
+func nativeProcessPID(_ *Runtime, _ []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Integer{Value: int64(os.Getpid())}}, nil
 }
 
-func nativeProcessParentPID(_ []object.Object) ([]object.Object, error) {
+func nativeProcessParentPID(_ *Runtime, _ []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Integer{Value: int64(os.Getppid())}}, nil
 }
 
@@ -146,7 +123,7 @@ func makeProcessResult(stdout, stderr string, exitCode int64, success bool) *obj
 	return result
 }
 
-func nativeProcessExecute(args []object.Object) ([]object.Object, error) {
+func nativeProcessExecute(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) < 2 {
 		return nil, fmt.Errorf("execute 至少需要 2 个参数")
 	}

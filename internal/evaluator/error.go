@@ -7,6 +7,7 @@ import (
 
 type checkSignal struct {
 	err *object.Error
+	pos ast.Position
 }
 
 func (c *checkSignal) Error() string { return c.err.Inspect() }
@@ -20,7 +21,7 @@ func evalCheckExpr(expr *ast.CheckExpr, env *Environment) (object.Object, error)
 		return nil, err
 	}
 	if e, ok := errorFromValue(val); ok {
-		return nil, &checkSignal{err: e}
+		return nil, &checkSignal{err: e, pos: expr.Position}
 	}
 	return stripErrorTail(val), nil
 }

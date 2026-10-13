@@ -113,9 +113,13 @@ func (r Runner) runFile(path string, root string) FileResult {
 		}
 		return FileResult{Path: path, SetupError: strings.Join(messages, "\n")}
 	}
-	env := evaluator.NewEnvironment()
+	rt := evaluator.NewRuntime()
+	if r.Out != nil {
+		rt.SetStdout(r.Out)
+	}
+	env := evaluator.NewEnvironmentForRuntime(rt)
 	env.BaseDir = filepath.Dir(path)
-	env.SetLoader(evaluator.NewLoader(env.BaseDir))
+	env.SetLoader(evaluator.NewLoaderForRuntime(rt, env.BaseDir))
 	if _, err := evaluator.Eval(prog, env); err != nil {
 		return FileResult{Path: path, SetupError: err.Error()}
 	}

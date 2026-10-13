@@ -12,6 +12,7 @@ import (
 )
 
 type Loader struct {
+	rt                *Runtime
 	cache             map[string]*object.Module
 	loading           map[string]bool
 	modulesDirs       []string
@@ -21,6 +22,17 @@ type Loader struct {
 
 func NewLoader(modulesDir string) *Loader {
 	return &Loader{
+		rt:          NewRuntime(),
+		cache:       map[string]*object.Module{},
+		loading:     map[string]bool{},
+		modulesDirs: defaultModulesDirs(modulesDir),
+	}
+}
+
+// NewLoaderForRuntime 创建绑定到指定运行实例的模块加载器。
+func NewLoaderForRuntime(rt *Runtime, modulesDir string) *Loader {
+	return &Loader{
+		rt:          rt,
 		cache:       map[string]*object.Module{},
 		loading:     map[string]bool{},
 		modulesDirs: defaultModulesDirs(modulesDir),
@@ -141,7 +153,7 @@ func (l *Loader) Load(importerBase string, path string) (*object.Module, error) 
 		mixfixRegistry = newMixfixFunctionRegistry()
 		l.mixfixRegistry = mixfixRegistry
 	}
-	env := NewEnvironment()
+	env := newEnvironment(l.rt)
 	env.primitiveRegistry = registry
 	env.mixfixRegistry = mixfixRegistry
 	env.BaseDir = base
@@ -172,7 +184,7 @@ func moduleNameFromPath(full string) string {
 
 func evalImportStmt(stmt *ast.ImportStmt, env *Environment) (object.Object, error) {
 	if env.Loader == nil {
-		env.SetLoader(NewLoader(env.BaseDir))
+		env.SetLoader(NewLoaderForRuntime(env.Runtime(), env.BaseDir))
 	}
 	mod, err := env.Loader.Load(env.BaseDir, stmt.Path)
 	if err != nil {

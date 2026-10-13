@@ -7,7 +7,7 @@ import (
 	"fan/internal/object"
 )
 
-func nativeDateUnix(args []object.Object) ([]object.Object, error) {
+func nativeDateUnix(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 3 {
 		return nil, fmt.Errorf("dateUnix 需要 3 个参数")
 	}

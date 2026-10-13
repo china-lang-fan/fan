@@ -1,6 +1,7 @@
 package evaluator
 
 import (
+	"io"
 	"strings"
 	"testing"
 
@@ -15,6 +16,20 @@ func runSource(t *testing.T, src string) (object.Object, error) {
 		t.Fatalf("解析失败：%v", errs)
 	}
 	return Eval(prog, NewEnvironment())
+}
+
+// runSourceWithOutput 用指定输出目标运行源码，返回结果与运行实例。
+func runSourceWithOutput(t *testing.T, src string, w io.Writer) (object.Object, *Runtime, error) {
+	t.Helper()
+	prog, errs := parser.ParseProgram(src)
+	if len(errs) > 0 {
+		t.Fatalf("解析失败：%v", errs)
+	}
+	rt := NewRuntime()
+	rt.SetStdout(w)
+	env := NewEnvironmentForRuntime(rt)
+	res, err := Eval(prog, env)
+	return res, rt, err
 }
 
 func mustInt(t *testing.T, src string, want int64) {

@@ -8,10 +8,11 @@ import (
 	"fan/internal/tagsys"
 )
 
-type NativeFunction func(args []object.Object) ([]object.Object, error)
+type NativeFunction func(rt *Runtime, args []object.Object) ([]object.Object, error)
 
 type nativeCallable struct {
 	name string
+	rt   *Runtime
 	fn   NativeFunction
 }
 
@@ -29,7 +30,7 @@ func (c *nativeCallable) Call(args []tagsys.Object) ([]tagsys.Object, error) {
 		}
 		callArgs[i] = value
 	}
-	values, err := c.fn(callArgs)
+	values, err := c.fn(c.rt, callArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +39,11 @@ func (c *nativeCallable) Call(args []tagsys.Object) ([]tagsys.Object, error) {
 		out[i] = value
 	}
 	return out, nil
+}
+
+// withRuntime 返回绑定到指定运行实例的原生函数副本。
+func (c *nativeCallable) withRuntime(rt *Runtime) *nativeCallable {
+	return &nativeCallable{name: c.name, rt: rt, fn: c.fn}
 }
 
 type classCallable struct {
@@ -54,7 +60,7 @@ func (c *classCallable) Call(args []tagsys.Object) ([]tagsys.Object, error) {
 	for i, arg := range args {
 		callArgs[i] = arg.(object.Object)
 	}
-	inst, err := c.cls.instantiate(ast.Position{}, callArgs)
+	inst, err := c.cls.instantiate(nil, ast.Position{}, callArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +120,7 @@ func (c *fanCallable) Call(args []tagsys.Object) ([]tagsys.Object, error) {
 }
 
 type runtimeTagContext struct {
+	rt       *Runtime
 	tag      object.Object
 	target   tagsys.Target
 	callable tagsys.Callable
@@ -209,31 +216,60 @@ func (c *runtimeTagContext) 替换实现(callable tagsys.Callable) {
 	c.ReplaceCallable(callable)
 }
 
-var builtinClasses = map[string]*Class{}
-var nativeFunctions = map[string]tagsys.Callable{}
-var goTagHandlers = map[string]tagsys.Handler{}
-var fanTagHandlers = map[string]*Function{}
+// 进程级只读模板：各 *_native.go 的 init() 在启动时注册一次，
+// NewRuntime 时复制成每个运行实例私有的可变副本。
+var (
+	builtinClassTemplate   = map[string][]ast.FieldDecl{}
+	nativeFunctionTemplate = map[string]NativeFunction{}
+	goTagHandlerTemplate   = map[string]tagsys.Handler{}
+)
 
+func cloneBuiltinClasses() map[string]*Class {
+	out := make(map[string]*Class, len(builtinClassTemplate))
+	for name, fields := range builtinClassTemplate {
+		out[name] = &Class{
+			Name:    name,
+			Fields:  append([]ast.FieldDecl(nil), fields...),
+			Methods: map[string]*Function{},
+		}
+	}
+	return out
+}
+
+func cloneNativeFunctions(rt *Runtime) map[string]tagsys.Callable {
+	out := make(map[string]tagsys.Callable, len(nativeFunctionTemplate))
+	for name, fn := range nativeFunctionTemplate {
+		out[name] = &nativeCallable{name: name, rt: rt, fn: fn}
+	}
+	return out
+}
+
+func cloneGoTagHandlers() map[string]tagsys.Handler {
+	out := make(map[string]tagsys.Handler, len(goTagHandlerTemplate))
+	for name, handler := range goTagHandlerTemplate {
+		out[name] = handler
+	}
+	return out
+}
+
+// RegisterBuiltinClass 在内建类模板中登记一个内建标签模型。
 func RegisterBuiltinClass(name string, fields []ast.FieldDecl) *Class {
-	cls := &Class{
+	builtinClassTemplate[name] = append([]ast.FieldDecl(nil), fields...)
+	return &Class{
 		Name:    name,
 		Fields:  append([]ast.FieldDecl(nil), fields...),
 		Methods: map[string]*Function{},
 	}
-	builtinClasses[name] = cls
-	return cls
 }
 
+// RegisterNativeFunction 在原生函数模板中登记一个内建实现。
 func RegisterNativeFunction(name string, fn NativeFunction) {
-	nativeFunctions[name] = &nativeCallable{name: name, fn: fn}
+	nativeFunctionTemplate[name] = fn
 }
 
+// RegisterTagHandler 在 Go 标签处理器模板中登记一个处理器。
 func RegisterTagHandler(name string, handler tagsys.Handler) {
-	goTagHandlers[name] = handler
-}
-
-func registerFanTagHandler(name string, fn *Function) {
-	fanTagHandlers[name] = fn
+	goTagHandlerTemplate[name] = handler
 }
 
 func init() {
@@ -245,7 +281,7 @@ func init() {
 	RegisterTagHandler("内建", tagsys.HandlerFunc(builtinTagHandler))
 	RegisterNativeFunction("print", nativePrint)
 	RegisterNativeFunction("打印", nativePrint)
-	RegisterNativeFunction("测试.加一", func(args []object.Object) ([]object.Object, error) {
+	RegisterNativeFunction("测试.加一", func(_ *Runtime, args []object.Object) ([]object.Object, error) {
 		if len(args) != 1 {
 			return nil, fmt.Errorf("测试.加一 需要 1 个参数")
 		}
@@ -255,7 +291,7 @@ func init() {
 		}
 		return []object.Object{&object.Integer{Value: n.Value + 1}}, nil
 	})
-	RegisterNativeFunction("测试.基础实例", func(args []object.Object) ([]object.Object, error) {
+	RegisterNativeFunction("测试.基础实例", func(_ *Runtime, args []object.Object) ([]object.Object, error) {
 		cls := &Class{
 			Name:    "基础",
 			Fields:  []ast.FieldDecl{{Name: "值", Type: ast.TypeString}},
@@ -265,17 +301,21 @@ func init() {
 	})
 }
 
-func nativePrint(args []object.Object) ([]object.Object, error) {
+func nativePrint(rt *Runtime, args []object.Object) ([]object.Object, error) {
+	if rt == nil {
+		rt = NewRuntime()
+	}
 	values := args
 	if len(args) == 1 {
 		if elements, ok := args[0].(*object.Array); ok {
 			values = elements.Elements
 		}
 	}
-	printObjects(values)
+	writeObjects(rt.Stdout(), values)
 	return []object.Object{object.Null}, nil
 }
 
+// builtinTagHandler 通过 runtimeTagContext 访问运行实例上的原生函数表。
 func builtinTagHandler(ctx tagsys.Context) error {
 	tag, ok := ctx.Tag().(*Instance)
 	if !ok || tag.Class.Name != "内建" {
@@ -289,7 +329,11 @@ func builtinTagHandler(ctx tagsys.Context) error {
 	if !ok {
 		return fmt.Errorf("内建标签值必须是字符串")
 	}
-	fn, ok := nativeFunctions[name.Value]
+	rtCtx, ok := ctx.(*runtimeTagContext)
+	if !ok {
+		return fmt.Errorf("内建标签缺少运行实例")
+	}
+	fn, ok := rtCtx.rt.nativeFunctions[name.Value]
 	if !ok {
 		return fmt.Errorf("内建函数未注册：%s", name.Value)
 	}
@@ -304,19 +348,7 @@ func builtinTagHandler(ctx tagsys.Context) error {
 	return nil
 }
 
-func resolveClass(name string, env *Environment) (*Class, bool) {
-	if cls, ok := builtinClasses[name]; ok {
-		return cls, true
-	}
-	value, ok := env.get(name)
-	if !ok {
-		return nil, false
-	}
-	cls, ok := value.(*Class)
-	return cls, ok
-}
-
-func createTagInstance(cls *Class, tagNode *ast.TagExpr, env *Environment) (*Instance, error) {
+func createTagInstance(rt *Runtime, cls *Class, tagNode *ast.TagExpr, env *Environment) (*Instance, error) {
 	if len(tagNode.Positional) > 1 {
 		return nil, fmt.Errorf("标签未命名参数最多一个")
 	}
@@ -360,26 +392,26 @@ func createTagInstance(cls *Class, tagNode *ast.TagExpr, env *Environment) (*Ins
 	return inst, nil
 }
 
-func processTags(target tagsys.Target, tagExprs []*ast.TagExpr, env *Environment) error {
+func processTags(rt *Runtime, target tagsys.Target, tagExprs []*ast.TagExpr, env *Environment) error {
 	for _, tagNode := range tagExprs {
-		cls, ok := resolveClass(tagNode.TypeName, env)
+		cls, ok := rt.resolveClass(tagNode.TypeName, env)
 		if !ok {
 			return &EvalError{Pos: tagNode.Position, Reason: fmt.Sprintf("标签模型 %s 未定义", tagNode.TypeName)}
 		}
-		instance, err := createTagInstance(cls, tagNode, env)
+		instance, err := createTagInstance(rt, cls, tagNode, env)
 		if err != nil {
 			return &EvalError{Pos: tagNode.Position, Reason: err.Error()}
 		}
 		attachTag(target, instance)
 		callable := initialCallable(target)
-		ctx := &runtimeTagContext{tag: instance, target: target, callable: callable}
-		if handler, ok := goTagHandlers[tagNode.TypeName]; ok {
+		ctx := &runtimeTagContext{rt: rt, tag: instance, target: target, callable: callable}
+		if handler, ok := rt.goTagHandlers[tagNode.TypeName]; ok {
 			if err := handler.Handle(ctx); err != nil {
 				return &EvalError{Pos: tagNode.Position, Reason: err.Error()}
 			}
 			continue
 		}
-		if handler, ok := fanTagHandlers[tagNode.TypeName]; ok {
+		if handler, ok := rt.fanTagHandlers[tagNode.TypeName]; ok {
 			if _, err := handler.Call([]tagsys.Object{ctx}); err != nil {
 				return &EvalError{Pos: tagNode.Position, Reason: err.Error()}
 			}
@@ -433,7 +465,7 @@ func callTagsysCallable(callable tagsys.Callable, args []object.Object, pos ast.
 	return object.Null, nil
 }
 
-func callDynamicMember(obj object.Object, member *ast.MemberExpr, args []object.Object, pos ast.Position) (object.Object, error) {
+func callDynamicMember(rt *Runtime, obj object.Object, member *ast.MemberExpr, args []object.Object, pos ast.Position) (object.Object, error) {
 	field, err := evalFieldAccess(member, nil, obj)
 	if err != nil {
 		return nil, err
@@ -447,10 +479,10 @@ func callDynamicMember(obj object.Object, member *ast.MemberExpr, args []object.
 	return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("%s 不是可调用对象", member.Name)}
 }
 
-func processFunctionTags(fn *Function, tags []*ast.TagExpr, env *Environment) error {
-	return processTags(fn, tags, env)
+func processFunctionTags(rt *Runtime, fn *Function, tags []*ast.TagExpr, env *Environment) error {
+	return processTags(rt, fn, tags, env)
 }
 
-func processClassTags(cls *Class, tags []*ast.TagExpr, env *Environment) error {
-	return processTags(cls, tags, env)
+func processClassTags(rt *Runtime, cls *Class, tags []*ast.TagExpr, env *Environment) error {
+	return processTags(rt, cls, tags, env)
 }

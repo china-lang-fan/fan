@@ -17,7 +17,7 @@ func toFloatObject(value object.Object) (float64, bool) {
 	return 0, false
 }
 
-func nativeSqrt(args []object.Object) ([]object.Object, error) {
+func nativeSqrt(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("sqrt 需要 1 个参数")
 	}
@@ -31,7 +31,7 @@ func nativeSqrt(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.Float{Value: math.Sqrt(value)}}, nil
 }
 
-func nativePow(args []object.Object) ([]object.Object, error) {
+func nativePow(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("pow 需要 2 个参数")
 	}

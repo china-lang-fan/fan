@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"strings"
 
 	"fan/internal/ast"
 	"fan/internal/object"
@@ -10,10 +11,26 @@ import (
 type EvalError struct {
 	Pos    ast.Position
 	Reason string
+	Stack  []object.StackFrame
 }
 
 func (e *EvalError) Error() string {
-	return fmt.Sprintf("第%d行%d列：%s", e.Pos.Line, e.Pos.Column, e.Reason)
+	if e.Pos.Line > 0 {
+		return fmt.Sprintf("第%d行%d列：%s%s", e.Pos.Line, e.Pos.Column, e.Reason, formatStack(e.Stack))
+	}
+	return e.Reason + formatStack(e.Stack)
+}
+
+func formatStack(frames []object.StackFrame) string {
+	if len(frames) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, f := range frames {
+		b.WriteString("\n")
+		b.WriteString(f.String())
+	}
+	return b.String()
 }
 
 func Eval(node ast.Node, env *Environment) (object.Object, error) {
@@ -73,7 +90,7 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 	case *ast.ForEachStmt:
 		return evalForEachStmt(n, env)
 	case *ast.DeferStmt:
-		return evalDeferStmt(n, env)
+		return evalDeferStmt(env.Runtime(), n, env)
 	case *ast.ThrowStmt:
 		return evalThrowStmt(n, env)
 	case *ast.CheckExpr:
@@ -109,8 +126,9 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 }
 
 func evalProgram(prog *ast.Program, env *Environment) (object.Object, error) {
-	frame := pushFrame()
-	defer popFrame()
+	rt := env.Runtime()
+	frame := rt.pushFrame()
+	defer rt.popFrame()
 	var last object.Object
 	for _, stmt := range prog.Statements {
 		res, err := Eval(stmt, env)
@@ -126,7 +144,7 @@ func evalProgram(prog *ast.Program, env *Environment) (object.Object, error) {
 			}
 			if panicErr, ok := err.(*panicSignal); ok {
 				frame.panic = panicErr
-				deferErr := runDefers(frame)
+				deferErr := runDefers(rt, frame)
 				if deferErr != nil {
 					return nil, deferErr
 				}
@@ -135,16 +153,22 @@ func evalProgram(prog *ast.Program, env *Environment) (object.Object, error) {
 				}
 				return nil, frame.panic
 			}
-			deferErr := runDefers(frame)
+			deferErr := runDefers(rt, frame)
 			if deferErr != nil {
 				return nil, deferErr
 			}
 			pos := stmt.Pos()
-			return nil, &EvalError{Pos: pos, Reason: err.Error()}
+			if evalErr, ok := err.(*EvalError); ok {
+				if evalErr.Stack == nil {
+					evalErr.Stack = rt.Stack()
+				}
+				return nil, evalErr
+			}
+			return nil, &EvalError{Pos: pos, Reason: err.Error(), Stack: rt.Stack()}
 		}
 		last = res
 	}
-	if err := runDefers(frame); err != nil {
+	if err := runDefers(rt, frame); err != nil {
 		return nil, err
 	}
 	return last, nil
@@ -648,7 +672,7 @@ func evalReturnStmt(node *ast.ReturnStmt, env *Environment) (object.Object, erro
 
 func evalCallExprDispatch(node *ast.CallExpr, env *Environment) (object.Object, error) {
 	if ident, ok := node.Callee.(*ast.Identifier); ok && ident.Name == "捕获" && len(node.Args) == 0 {
-		return evalRecover(), nil
+		return evalRecover(env.Runtime()), nil
 	}
 	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
 		return evalMixfixCall(chain, env, node.Position)
@@ -696,18 +720,18 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 		if !ok {
 			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("模块 %s 没有导出 %s", target.Name, member.Name)}
 		}
-		return callExported(callee, args, node.Position)
+		return callExported(env.Runtime(), callee, args, node.Position)
 	default:
-		return callDynamicMember(obj, member, args, node.Position)
+		return callDynamicMember(env.Runtime(), obj, member, args, node.Position)
 	}
 }
 
-func callExported(callee object.Object, args []object.Object, pos ast.Position) (object.Object, error) {
+func callExported(rt *Runtime, callee object.Object, args []object.Object, pos ast.Position) (object.Object, error) {
 	switch fn := callee.(type) {
 	case *Function:
 		return applyFunction(fn, args, pos)
 	case *Class:
-		return fn.instantiate(pos, args)
+		return fn.instantiate(rt, pos, args)
 	}
 	return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("%s 不是可调用对象", callee.Kind())}
 }

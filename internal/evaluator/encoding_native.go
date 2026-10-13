@@ -80,7 +80,7 @@ func jsonValueToObject(value interface{}) object.Object {
 	return object.Null
 }
 
-func nativeJSONEncode(args []object.Object) ([]object.Object, error) {
+func nativeJSONEncode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("jsonEncode 需要 1 个参数")
 	}
@@ -95,7 +95,7 @@ func nativeJSONEncode(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: string(data)}, object.Null}, nil
 }
 
-func nativeJSONDecode(args []object.Object) ([]object.Object, error) {
+func nativeJSONDecode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("jsonDecode 需要 1 个参数")
 	}
@@ -110,7 +110,7 @@ func nativeJSONDecode(args []object.Object) ([]object.Object, error) {
 	return []object.Object{jsonValueToObject(result), object.Null}, nil
 }
 
-func nativeBase64Encode(args []object.Object) ([]object.Object, error) {
+func nativeBase64Encode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("base64Encode 需要 1 个参数")
 	}
@@ -121,7 +121,7 @@ func nativeBase64Encode(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: base64.StdEncoding.EncodeToString([]byte(value.Value))}}, nil
 }
 
-func nativeBase64Decode(args []object.Object) ([]object.Object, error) {
+func nativeBase64Decode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("base64Decode 需要 1 个参数")
 	}
@@ -136,7 +136,7 @@ func nativeBase64Decode(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: string(data)}, object.Null}, nil
 }
 
-func nativeURLEncode(args []object.Object) ([]object.Object, error) {
+func nativeURLEncode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("urlEncode 需要 1 个参数")
 	}
@@ -147,7 +147,7 @@ func nativeURLEncode(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: url.QueryEscape(value.Value)}}, nil
 }
 
-func nativeURLDecode(args []object.Object) ([]object.Object, error) {
+func nativeURLDecode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("urlDecode 需要 1 个参数")
 	}
@@ -162,7 +162,7 @@ func nativeURLDecode(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: decoded}, object.Null}, nil
 }
 
-func nativeHexEncode(args []object.Object) ([]object.Object, error) {
+func nativeHexEncode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("hexEncode 需要 1 个参数")
 	}
@@ -173,7 +173,7 @@ func nativeHexEncode(args []object.Object) ([]object.Object, error) {
 	return []object.Object{&object.String{Value: hex.EncodeToString([]byte(value.Value))}}, nil
 }
 
-func nativeHexDecode(args []object.Object) ([]object.Object, error) {
+func nativeHexDecode(_ *Runtime, args []object.Object) ([]object.Object, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("hexDecode 需要 1 个参数")
 	}

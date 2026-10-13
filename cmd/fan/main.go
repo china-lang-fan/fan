@@ -64,8 +64,6 @@ func run(args []string) error {
 }
 
 func runFile(path string, scriptArgs []string) error {
-	evaluator.SetProcessContext(path, scriptArgs)
-	defer evaluator.ResetProcessContext()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -78,9 +76,11 @@ func runFile(path string, scriptArgs []string) error {
 		return fmt.Errorf("解析失败")
 	}
 	dir := filepath.Dir(absPath(path))
-	env := evaluator.NewEnvironment()
+	rt := evaluator.NewRuntime()
+	rt.SetProcessContext(path, scriptArgs)
+	env := evaluator.NewEnvironmentForRuntime(rt)
 	env.BaseDir = dir
-	env.SetLoader(evaluator.NewLoader(dir))
+	env.SetLoader(evaluator.NewLoaderForRuntime(rt, dir))
 	if _, err := evaluator.Eval(prog, env); err != nil {
 		return err
 	}
@@ -96,7 +96,9 @@ func absPath(path string) string {
 }
 
 func runREPL(in io.Reader, out io.Writer) error {
-	env := evaluator.NewEnvironment()
+	rt := evaluator.NewRuntime()
+	rt.SetStdout(out)
+	env := evaluator.NewEnvironmentForRuntime(rt)
 	scanner := bufio.NewScanner(in)
 	fmt.Fprintln(out, "凡语言 REPL，输入 :退出 结束")
 	for {
