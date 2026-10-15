@@ -25,3 +25,25 @@ func (s *InterfaceStmt) statementNode() {}
 func (s *InterfaceStmt) String() string {
 	return "接口 " + s.Name
 }
+
+// TypeTestExpr 是 “值 是 类型” 表达式，等价于 Java 的 instanceof。
+type TypeTestExpr struct {
+	Position Position
+	Object   Expression
+	TypeName string
+}
+
+func (e *TypeTestExpr) Pos() Position   { return e.Position }
+func (e *TypeTestExpr) expressionNode() {}
+func (e *TypeTestExpr) String() string  { return e.TypeName }
+
+// TypeCastExpr 是 “值 转为 类型” 表达式，求值结果为 (值, 是否成功)。
+type TypeCastExpr struct {
+	Position Position
+	Object   Expression
+	TypeName string
+}
+
+func (e *TypeCastExpr) Pos() Position   { return e.Position }
+func (e *TypeCastExpr) expressionNode() {}
+func (e *TypeCastExpr) String() string  { return e.TypeName }

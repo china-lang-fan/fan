@@ -344,6 +344,10 @@ func childrenOf(node ast.Node) []ast.Node {
 	case *ast.BinaryExpr:
 		addExpr(n.Left)
 		addExpr(n.Right)
+	case *ast.TypeTestExpr:
+		addExpr(n.Object)
+	case *ast.TypeCastExpr:
+		addExpr(n.Object)
 	case *ast.UnaryExpr:
 		addExpr(n.Right)
 	case *ast.TernaryExpr:

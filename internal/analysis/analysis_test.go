@@ -229,3 +229,26 @@ func TestInterfaceSymbols(t *testing.T) {
 		t.Fatalf("接口方法符号错误：%#v", iface.Children)
 	}
 }
+
+func TestTypeTestAndCastNoUndefined(t *testing.T) {
+	src := `接口 说话者
+    方法 说话() -> 字符串
+结束
+定义 模型 狗
+    变量 字符串 名
+结束
+定义 狗 的 方法 说话() -> 字符串
+    返回 "汪"
+结束
+变量 谁 = 狗()
+如果 谁 是 说话者 那么
+    打印("ok")
+结束
+变量 s、ok = 谁 转为 说话者
+变量 n、ok2 = "42" 转为 整数
+`
+	diags := Analyze(src)
+	if d := findCode(diags, "undefined-name"); d != nil {
+		t.Fatalf("是/转为 不应产生未定义告警：%#v", d)
+	}
+}

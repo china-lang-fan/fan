@@ -3,6 +3,8 @@ package evaluator
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
 	"fan/internal/ast"
 	"fan/internal/object"
@@ -173,6 +175,184 @@ func methodArity(fn *Function) int {
 		arity--
 	}
 	return arity
+}
+
+// valueIsType 判断值是否属于/兼容给定类型名。支持：
+// 基本类型（整数/小数/字符串/布尔/数组/字典/字节/字符）、模型（含嵌入链）、
+// 接口（方法集满足）。空 仅兼容类型 空/错误。
+func valueIsType(value object.Object, typeName string, env *Environment) bool {
+	if value == nil {
+		value = object.Null
+	}
+	if kind, ok := primitiveKindFromName(typeName); ok {
+		return runtimeTypeName(value) == kind
+	}
+	if value.Kind() == object.KindNil {
+		switch typeName {
+		case "空", "错误":
+			return true
+		}
+		// 空 可赋给任何接口；名义模型类型不匹配。
+		if iface, ok := env.Runtime().lookupInterface(typeName, env); ok {
+			_, _, satisfied := checkInterfaceSatisfied(iface, value, env)
+			return satisfied
+		}
+		return false
+	}
+	if inst, ok := value.(*Instance); ok {
+		if inst.Class.Name == typeName {
+			return true
+		}
+		if classHasEmbed(inst.Class, typeName, map[string]bool{}) {
+			return true
+		}
+	}
+	if iface, ok := env.Runtime().lookupInterface(typeName, env); ok {
+		_, _, satisfied := checkInterfaceSatisfied(iface, value, env)
+		return satisfied
+	}
+	return false
+}
+
+// classHasEmbed 判断模型的嵌入链中是否包含指定模型名。
+func classHasEmbed(cls *Class, name string, seen map[string]bool) bool {
+	if cls == nil || seen[cls.Name] {
+		return false
+	}
+	seen[cls.Name] = true
+	for _, embed := range cls.Embeds {
+		if embed.Name == name || classHasEmbed(embed, name, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+func evalTypeTestExpr(expr *ast.TypeTestExpr, env *Environment) (object.Object, error) {
+	value, err := Eval(expr.Object, env)
+	if err != nil {
+		return nil, err
+	}
+	if value == nil {
+		value = object.Null
+	}
+	return boolObject(valueIsType(value, expr.TypeName, env)), nil
+}
+
+func boolObject(b bool) *object.Bool {
+	if b {
+		return object.True
+	}
+	return object.False
+}
+
+func evalTypeCastExpr(expr *ast.TypeCastExpr, env *Environment) (object.Object, error) {
+	value, err := Eval(expr.Object, env)
+	if err != nil {
+		return nil, err
+	}
+	if value == nil {
+		value = object.Null
+	}
+	if valueIsType(value, expr.TypeName, env) {
+		return &object.Tuple{Values: []object.Object{value, object.True}}, nil
+	}
+	// 基本类型按 Go 风格做值转换（不抛错，失败返回 空、假）。
+	if kind, ok := primitiveKindFromName(expr.TypeName); ok {
+		if converted, ok := convertToPrimitiveKind(value, kind); ok {
+			return &object.Tuple{Values: []object.Object{converted, object.True}}, nil
+		}
+	}
+	return &object.Tuple{Values: []object.Object{object.Null, object.False}}, nil
+}
+
+// convertToPrimitiveKind 在类型断言场景做基本类型值转换。
+func convertToPrimitiveKind(value object.Object, kind string) (object.Object, bool) {
+	switch kind {
+	case "integer":
+		switch v := value.(type) {
+		case *object.Float:
+			return &object.Integer{Value: int64(v.Value)}, true
+		case *object.Bool:
+			if v == object.True {
+				return &object.Integer{Value: 1}, true
+			}
+			return &object.Integer{Value: 0}, true
+		case *object.Byte:
+			return &object.Integer{Value: int64(v.Value)}, true
+		case *object.Char:
+			return &object.Integer{Value: int64(v.Value)}, true
+		case *object.String:
+			if n, err := strconv.ParseInt(strings.TrimSpace(v.Value), 10, 64); err == nil {
+				return &object.Integer{Value: n}, true
+			}
+		}
+	case "float":
+		switch v := value.(type) {
+		case *object.Integer:
+			return &object.Float{Value: float64(v.Value)}, true
+		case *object.Bool:
+			if v == object.True {
+				return &object.Float{Value: 1}, true
+			}
+			return &object.Float{Value: 0}, true
+		case *object.Byte:
+			return &object.Float{Value: float64(v.Value)}, true
+		case *object.Char:
+			return &object.Float{Value: float64(v.Value)}, true
+		case *object.String:
+			if f, err := strconv.ParseFloat(strings.TrimSpace(v.Value), 64); err == nil {
+				return &object.Float{Value: f}, true
+			}
+		}
+	case "string":
+		return &object.String{Value: value.Inspect()}, true
+	case "byte":
+		if n, ok := integerLike(value); ok && 0 <= n && n <= 255 {
+			return &object.Byte{Value: byte(n)}, true
+		}
+	case "char":
+		switch v := value.(type) {
+		case *object.Char:
+			return v, true
+		case *object.String:
+			runes := []rune(v.Value)
+			if len(runes) == 1 {
+				return &object.Char{Value: runes[0]}, true
+			}
+		case *object.Integer:
+			return &object.Char{Value: rune(v.Value)}, true
+		case *object.Byte:
+			return &object.Char{Value: rune(v.Value)}, true
+		}
+	case "boolean":
+		switch v := value.(type) {
+		case *object.Integer:
+			return boolObject(v.Value != 0), true
+		case *object.Float:
+			return boolObject(v.Value != 0), true
+		case *object.String:
+			switch strings.ToLower(strings.TrimSpace(v.Value)) {
+			case "真", "true", "1", "yes", "on":
+				return object.True, true
+			case "假", "false", "0", "no", "off":
+				return object.False, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func integerLike(value object.Object) (int64, bool) {
+	switch v := value.(type) {
+	case *object.Integer:
+		return v.Value, true
+	case *object.Byte:
+		return int64(v.Value), true
+	case *object.Char:
+		return int64(v.Value), true
+	}
+	return 0, false
 }
 
 // classMethodSet 收集模型自身及嵌入提升后的方法，同层多个嵌入提供

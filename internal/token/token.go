@@ -29,6 +29,8 @@ const (
 
 	EQ  Type = "EQ"
 	NEQ Type = "NEQ"
+	IS  Type = "IS"
+	AS  Type = "AS"
 	LT  Type = "LT"
 	LTE Type = "LTE"
 	GT  Type = "GT"
@@ -140,6 +142,8 @@ var keywords = map[string]Type{
 	"取余":   PERCENT,
 	"等于":   EQ,
 	"不等于":  NEQ,
+	"是":    IS,
+	"转为":   AS,
 	"小于":   LT,
 	"小于等于": LTE,
 	"大于":   GT,

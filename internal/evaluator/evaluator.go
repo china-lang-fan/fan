@@ -79,6 +79,10 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return evalClassStmt(n, env)
 	case *ast.InterfaceStmt:
 		return evalInterfaceStmt(n, env)
+	case *ast.TypeTestExpr:
+		return evalTypeTestExpr(n, env)
+	case *ast.TypeCastExpr:
+		return evalTypeCastExpr(n, env)
 	case *ast.MethodDef:
 		return evalMethodDef(n, env)
 	case *ast.FieldAssignExpr:

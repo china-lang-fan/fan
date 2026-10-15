@@ -29,6 +29,10 @@ func primitiveKindFromName(name string) (string, bool) {
 		return "array", true
 	case "字典":
 		return "dict", true
+	case "字节":
+		return "byte", true
+	case "字符":
+		return "char", true
 	}
 	return "", false
 }

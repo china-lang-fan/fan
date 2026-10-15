@@ -39,6 +39,10 @@ func (idx *Index) inferType(expr ast.Expression, locals map[string]string) strin
 			return t
 		}
 		return idx.inferType(n.Else, locals)
+	case *ast.TypeTestExpr:
+		return "布尔"
+	case *ast.TypeCastExpr:
+		return n.TypeName
 	}
 	return ""
 }
@@ -180,6 +184,11 @@ func (idx *Index) localTypesForFunction(fn *ast.FunctionLiteral) map[string]stri
 			}
 			locals[n.Name] = t
 		case *ast.MultiDecl:
+			if cast, ok := n.Value.(*ast.TypeCastExpr); ok && len(n.Names) == 2 {
+				locals[n.Names[0]] = cast.TypeName
+				locals[n.Names[1]] = "布尔"
+				break
+			}
 			if t := idx.inferType(n.Value, locals); t != "" {
 				for _, name := range n.Names {
 					locals[name] = t

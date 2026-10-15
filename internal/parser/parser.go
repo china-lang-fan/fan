@@ -36,6 +36,8 @@ var precedences = map[token.Type]precedence{
 	token.LTE:     PREC_COMPARE,
 	token.GT:      PREC_COMPARE,
 	token.GTE:     PREC_COMPARE,
+	token.IS:      PREC_COMPARE,
+	token.AS:      PREC_COMPARE,
 	token.MEMBER:  PREC_POSTFIX,
 	token.DOT:     PREC_POSTFIX,
 	token.PLUS:    PREC_SUM,
@@ -1091,14 +1093,26 @@ func (p *Parser) parseInfix(left ast.Expression) ast.Expression {
 		}
 		return &ast.TernaryExpr{Position: pos, Cond: left, Then: thenExpr, Else: elseExpr}
 	}
-	op := p.cur.Literal
+	op := p.cur
 	pr := p.currentPrecedence()
 	p.next()
+	if op.Type == token.IS || op.Type == token.AS {
+		if p.cur.Type != token.IDENT && !isTypeToken(p.cur.Type) {
+			p.addError(p.cur, "%s 后面应为类型名", op.Literal)
+			return nil
+		}
+		typeName := p.cur.Literal
+		p.next()
+		if op.Type == token.IS {
+			return &ast.TypeTestExpr{Position: pos, Object: left, TypeName: typeName}
+		}
+		return &ast.TypeCastExpr{Position: pos, Object: left, TypeName: typeName}
+	}
 	right := p.parseExpression(pr)
 	if right == nil {
 		return nil
 	}
-	return &ast.BinaryExpr{Position: pos, Op: op, Left: left, Right: right}
+	return &ast.BinaryExpr{Position: pos, Op: op.Literal, Left: left, Right: right}
 }
 
 func (p *Parser) parseIndexAssignOrExpr() ast.Statement {
