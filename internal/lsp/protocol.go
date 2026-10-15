@@ -140,6 +140,7 @@ const (
 	completionKindField     = 5
 	completionKindMethod    = 2
 	completionKindClass     = 7
+	completionKindInterface = 8
 	completionKindConstant  = 21
 	completionKindParameter = 14
 	completionKindModule    = 9

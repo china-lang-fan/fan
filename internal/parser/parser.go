@@ -190,6 +190,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseReturnStatement()
 	case p.cur.Type == token.CLASS:
 		return p.parseClassStatement()
+	case p.cur.Type == token.INTERFACE:
+		return p.parseInterfaceStatement()
 	case p.cur.Type == token.IDENT && p.peek.Type == token.MEMBER:
 		return p.parseIdentMemberStatement()
 	case p.cur.Type == token.IDENT && isTypeToken(p.peek.Type) && p.peekTwo().Type == token.MEMBER:
@@ -486,6 +488,12 @@ func (p *Parser) parseVarDecl() ast.Statement {
 	case token.TYPE_CHAR:
 		sawKeyword = true
 		declType = ast.TypeChar
+		p.next()
+	}
+
+	// 具名类型标注：变量 说话者 阿黄 = ...（模型或接口名）
+	if sawKeyword && p.cur.Type == token.IDENT && p.peek.Type == token.IDENT {
+		declType = ast.DeclType(p.cur.Literal)
 		p.next()
 	}
 
@@ -1940,6 +1948,92 @@ func (p *Parser) parseClassStatement() ast.Statement {
 			return nil
 		}
 	}
+}
+
+func (p *Parser) parseInterfaceStatement() ast.Statement {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	p.next()
+	if p.cur.Type != token.IDENT {
+		p.addError(p.cur, "接口 需要名字")
+		return nil
+	}
+	name := p.cur.Literal
+	p.next()
+	iface := &ast.InterfaceStmt{Position: pos, Name: name}
+	if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF {
+		p.addError(p.cur, "接口名后应换行")
+		return nil
+	}
+	p.skipStatementEnd()
+	for {
+		switch p.cur.Type {
+		case token.END:
+			p.next()
+			return iface
+		case token.EOF:
+			p.addError(p.cur, "接口缺少 结束")
+			return nil
+		case token.ILLEGAL:
+			p.addError(p.cur, "非法字符：%s", p.cur.Literal)
+			return nil
+		case token.EMBED:
+			p.next()
+			if p.cur.Type != token.IDENT {
+				p.addError(p.cur, "嵌入需要接口名")
+				return nil
+			}
+			iface.Embeds = append(iface.Embeds, p.cur.Literal)
+			p.next()
+			if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF {
+				p.addError(p.cur, "嵌入声明应换行结束")
+				return nil
+			}
+			p.skipStatementEnd()
+		case token.METHOD:
+			sig, ok := p.parseInterfaceMethod()
+			if !ok {
+				return nil
+			}
+			iface.Methods = append(iface.Methods, sig)
+			p.skipStatementEnd()
+		default:
+			p.addError(p.cur, "接口内只能包含 方法签名/嵌入，实际：%q", p.cur.Literal)
+			return nil
+		}
+	}
+}
+
+func (p *Parser) parseInterfaceMethod() (*ast.InterfaceMethodSig, bool) {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	p.next() // 跳过 方法
+	if p.cur.Type != token.IDENT {
+		p.addError(p.cur, "方法需要名字")
+		return nil, false
+	}
+	name := p.cur.Literal
+	p.next()
+	var params []ast.Parameter
+	if p.cur.Type == token.LPAREN {
+		var ok bool
+		params, ok = p.parseParamList()
+		if !ok {
+			return nil, false
+		}
+	}
+	retTypes, ok := p.parseReturnTypes()
+	if !ok {
+		return nil, false
+	}
+	if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF && p.cur.Type != token.END {
+		p.addError(p.cur, "接口方法签名后应换行，实际：%q", p.cur.Type)
+		return nil, false
+	}
+	return &ast.InterfaceMethodSig{
+		Name:        name,
+		Params:      params,
+		ReturnTypes: retTypes,
+		Position:    pos,
+	}, true
 }
 
 func (p *Parser) parseIdentMemberStatement() ast.Statement {

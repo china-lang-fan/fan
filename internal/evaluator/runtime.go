@@ -27,6 +27,7 @@ type Runtime struct {
 	args       []string
 
 	builtinClasses  map[string]*Class
+	interfaces      map[string]*Interface
 	nativeFunctions map[string]tagsys.Callable
 	goTagHandlers   map[string]tagsys.Handler
 	fanTagHandlers  map[string]*Function
@@ -44,6 +45,7 @@ func NewRuntime() *Runtime {
 		stdout:         os.Stdout,
 		args:           []string{},
 		builtinClasses: cloneBuiltinClasses(),
+		interfaces:     map[string]*Interface{},
 		goTagHandlers:  cloneGoTagHandlers(),
 		fanTagHandlers: map[string]*Function{},
 	}

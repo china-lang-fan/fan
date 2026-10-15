@@ -126,7 +126,7 @@ func (e *Environment) declare(name string, val object.Object, isConst bool, dt a
 	if _, ok := e.store[name]; ok {
 		return fmt.Errorf("变量 %s 已声明", name)
 	}
-	val, err := coerceDeclType(dt, val)
+	val, err := coerceDeclType(dt, val, e)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (e *Environment) assign(name string, val object.Object) error {
 	if b.isConst {
 		return fmt.Errorf("常量 %s 不可再赋值", name)
 	}
-	val, err := coerceDeclType(b.declType, val)
+	val, err := coerceDeclType(b.declType, val, e)
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (e *Environment) get(name string) (object.Object, bool) {
 	return b.value, true
 }
 
-func coerceDeclType(dt ast.DeclType, val object.Object) (object.Object, error) {
+func coerceDeclType(dt ast.DeclType, val object.Object, env *Environment) (object.Object, error) {
 	if dt == ast.TypeByte {
 		if b, ok := val.(*object.Byte); ok {
 			return b, nil
@@ -175,13 +175,13 @@ func coerceDeclType(dt ast.DeclType, val object.Object) (object.Object, error) {
 		}
 		return nil, fmt.Errorf("类型不匹配：声明为 字节，实际为 %s", val.Kind())
 	}
-	if err := checkDeclType(dt, val); err != nil {
+	if err := checkDeclType(dt, val, env); err != nil {
 		return nil, err
 	}
 	return val, nil
 }
 
-func checkDeclType(dt ast.DeclType, val object.Object) error {
+func checkDeclType(dt ast.DeclType, val object.Object, env *Environment) error {
 	if dt == ast.TypeAny {
 		return nil
 	}
@@ -226,6 +226,18 @@ func checkDeclType(dt ast.DeclType, val object.Object) error {
 		}
 		if inst, ok := val.(*Instance); ok && inst.Class.Name == string(dt) {
 			return nil
+		}
+		// 声明的类型名可能是接口：按方法集做结构化满足检查。
+		if env != nil {
+			if iface, ok := env.Runtime().lookupInterface(string(dt), env); ok {
+				if name, ambiguous, satisfied := checkInterfaceSatisfied(iface, val, env); !satisfied {
+					if ambiguous {
+						return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（方法 %s 在嵌入链中有歧义）", dt, val.Kind(), name)
+					}
+					return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（缺少方法 %s）", dt, val.Kind(), name)
+				}
+				return nil
+			}
 		}
 		return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s", dt, val.Kind())
 	}

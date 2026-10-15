@@ -99,7 +99,7 @@ func bindArguments(fn *Function, args []object.Object, pos ast.Position) ([]obje
 			}
 			extra := args[i:]
 			for _, val := range extra {
-				if err := checkDeclType(param.Type, val); err != nil {
+				if err := checkDeclType(param.Type, val, fn.Env); err != nil {
 					return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("参数 %s 类型不匹配：%s", param.Name, err.Error())}
 				}
 			}
@@ -157,7 +157,7 @@ func (f *Function) Call(args []tagsys.Object) ([]tagsys.Object, error) {
 	}
 }
 
-func callImpl(impl tagsys.Callable, args []tagsys.Object, pos ast.Position, returnTypes []ast.DeclType) (object.Object, error) {
+func callImpl(impl tagsys.Callable, args []tagsys.Object, pos ast.Position, returnTypes []ast.DeclType, env *Environment) (object.Object, error) {
 	results, err := impl.Call(args)
 	if err != nil {
 		return nil, err
@@ -170,7 +170,7 @@ func callImpl(impl tagsys.Callable, args []tagsys.Object, pos ast.Position, retu
 		}
 		returnValues[i] = value
 	}
-	return coerceReturnValues(pos, returnTypes, returnValues)
+	return coerceReturnValues(pos, returnTypes, returnValues, env)
 }
 
 func applyFunction(fn *Function, args []object.Object, pos ast.Position) (object.Object, error) {
@@ -187,7 +187,7 @@ func applyFunctionWithPanic(rt *Runtime, fn *Function, args []object.Object, pos
 		for i, value := range values {
 			callArgs[i] = value
 		}
-		return callImpl(fn.Impl, callArgs, pos, fn.ReturnTypes)
+		return callImpl(fn.Impl, callArgs, pos, fn.ReturnTypes, fn.Env)
 	}
 	if fn.MethodImpl != nil {
 		callArgs := make([]tagsys.Object, 0, len(values)+1)
@@ -199,7 +199,7 @@ func applyFunctionWithPanic(rt *Runtime, fn *Function, args []object.Object, pos
 		for _, value := range values {
 			callArgs = append(callArgs, value)
 		}
-		return callImpl(fn.MethodImpl, callArgs, pos, fn.ReturnTypes)
+		return callImpl(fn.MethodImpl, callArgs, pos, fn.ReturnTypes, fn.Env)
 	}
 	frame := rt.pushFrame()
 	frame.panic = inherited
@@ -225,7 +225,7 @@ func applyFunctionBodyWithFrame(rt *Runtime, fn *Function, values []object.Objec
 			}
 			continue
 		}
-		if err := checkDeclType(param.Type, values[i]); err != nil {
+		if err := checkDeclType(param.Type, values[i], fn.Env); err != nil {
 			return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("参数 %s 类型不匹配：%s", param.Name, err.Error())}
 		}
 		if err := env.declare(param.Name, values[i], false, param.Type); err != nil {
@@ -245,7 +245,7 @@ func applyFunctionBodyWithFrame(rt *Runtime, fn *Function, values []object.Objec
 			if err != nil {
 				return nil, err
 			}
-			coerced, coerceErr := coerceReturnValues(pos, fn.ReturnTypes, resultValues)
+			coerced, coerceErr := coerceReturnValues(pos, fn.ReturnTypes, resultValues, fn.Env)
 			if coerceErr != nil {
 				return nil, coerceErr
 			}
@@ -277,7 +277,7 @@ func applyFunctionBodyWithFrame(rt *Runtime, fn *Function, values []object.Objec
 		}
 		resultValues = []object.Object{result}
 	}
-	coerced, coerceErr := coerceReturnValues(pos, fn.ReturnTypes, resultValues)
+	coerced, coerceErr := coerceReturnValues(pos, fn.ReturnTypes, resultValues, fn.Env)
 	if coerceErr != nil {
 		return nil, coerceErr
 	}
@@ -298,7 +298,7 @@ func zeroFunctionResult(fn *Function, pos ast.Position) (object.Object, error) {
 	for i, dt := range fn.ReturnTypes {
 		values[i] = zeroValueForType(dt)
 	}
-	return coerceReturnValues(pos, fn.ReturnTypes, values)
+	return coerceReturnValues(pos, fn.ReturnTypes, values, fn.Env)
 }
 
 func (f *Function) checkReturn(cause *object.Error) ([]object.Object, error) {
@@ -317,7 +317,7 @@ func (f *Function) checkReturn(cause *object.Error) ([]object.Object, error) {
 	return values, nil
 }
 
-func coerceReturnValues(pos ast.Position, types []ast.DeclType, values []object.Object) (object.Object, error) {
+func coerceReturnValues(pos ast.Position, types []ast.DeclType, values []object.Object, env *Environment) (object.Object, error) {
 	if len(types) == 0 {
 		if len(values) <= 1 {
 			return values[0], nil
@@ -334,7 +334,7 @@ func coerceReturnValues(pos ast.Position, types []ast.DeclType, values []object.
 		if dt == ast.TypeError && values[i].Kind() == object.KindNil {
 			continue
 		}
-		if err := checkDeclType(dt, values[i]); err != nil {
+		if err := checkDeclType(dt, values[i], env); err != nil {
 			return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("第 %d 个返回值%s", i+1, err.Error())}
 		}
 	}

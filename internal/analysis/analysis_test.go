@@ -195,3 +195,37 @@ func TestUTF16Column(t *testing.T) {
 		t.Fatalf("BMP 中文字符列应为 2，实际 %d", got)
 	}
 }
+
+func TestInterfaceSymbols(t *testing.T) {
+	src := `接口 说话者
+    方法 说话() -> 字符串
+结束
+
+定义 模型 狗
+    变量 字符串 名
+结束
+
+定义 狗 的 方法 说话() -> 字符串
+    返回 "汪"
+结束
+
+函数 介绍(谁 说话者)
+    打印(谁.说话())
+结束
+
+变量 说话者 阿黄 = 狗("阿黄")
+介绍(阿黄)
+`
+	diags := Analyze(src)
+	if d := findCode(diags, "undefined-name"); d != nil {
+		t.Fatalf("接口相关名字不应报未定义：%#v", d)
+	}
+	doc := ParseDocument("file:///t.凡", src)
+	iface := doc.interfaces["说话者"]
+	if iface == nil {
+		t.Fatalf("未收集到接口符号")
+	}
+	if len(iface.Children) != 1 || iface.Children[0].Name != "说话" {
+		t.Fatalf("接口方法符号错误：%#v", iface.Children)
+	}
+}

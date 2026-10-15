@@ -20,6 +20,8 @@ type Document struct {
 	byName map[string][]*Symbol
 	// classes 按模型名保存模型符号。
 	classes map[string]*Symbol
+	// interfaces 按接口名保存接口符号。
+	interfaces map[string]*Symbol
 	// imports 按 导入时绑定的模块名 保存导入信息。
 	imports map[string]*importInfo
 	// fnRanges 记录函数体的行范围，供按光标位置找所在函数。
@@ -38,6 +40,7 @@ const (
 	KindFunction SymbolKind = iota
 	KindMixfixFunction
 	KindClass
+	KindInterface
 	KindField
 	KindMethod
 	KindVariable
@@ -66,13 +69,14 @@ type Symbol struct {
 func ParseDocument(uri, source string) *Document {
 	prog, _ := parser.ParseProgram(source)
 	doc := &Document{
-		URI:     uri,
-		Source:  source,
-		lines:   strings.Split(source, "\n"),
-		Prog:    prog,
-		byName:  map[string][]*Symbol{},
-		classes: map[string]*Symbol{},
-		imports: map[string]*importInfo{},
+		URI:        uri,
+		Source:     source,
+		lines:      strings.Split(source, "\n"),
+		Prog:       prog,
+		byName:     map[string][]*Symbol{},
+		classes:    map[string]*Symbol{},
+		interfaces: map[string]*Symbol{},
+		imports:    map[string]*importInfo{},
 	}
 	if prog != nil {
 		doc.collect()
@@ -187,6 +191,22 @@ func (d *Document) collectStatement(stmt ast.Statement, owner string) {
 		}
 		d.add(classSym)
 		d.classes[s.Name] = classSym
+	case *ast.InterfaceStmt:
+		ifaceSym := &Symbol{
+			Name: s.Name, Kind: KindInterface, Pos: s.Position,
+			EndPos: endOf(d.lines, s.Position),
+			Doc:    d.docBefore(s.Position.Line),
+		}
+		for _, m := range s.Methods {
+			ifaceSym.Children = append(ifaceSym.Children, &Symbol{
+				Name: m.Name, Kind: KindMethod, Owner: s.Name,
+				Detail: interfaceMethodSignature(m),
+				Pos:    m.Position,
+				EndPos: ast.Position{Line: m.Position.Line, Column: m.Position.Column + len([]rune(m.Name))},
+			})
+		}
+		d.add(ifaceSym)
+		d.interfaces[s.Name] = ifaceSym
 	case *ast.MethodDef:
 		sym := &Symbol{
 			Name: s.MethodName, Kind: KindMethod, Owner: s.ClassName,
@@ -211,6 +231,33 @@ func methodSignature(s *ast.MethodDef) string {
 	fn := *s.Function
 	fn.Name = s.MethodName
 	return simpleSignature(&fn)
+}
+
+func interfaceMethodSignature(m *ast.InterfaceMethodSig) string {
+	var builder strings.Builder
+	builder.WriteString(m.Name)
+	builder.WriteString("(")
+	for i, param := range m.Params {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(param.Name)
+		if param.Type != "" && param.Type != ast.TypeAny {
+			builder.WriteString(" ")
+			builder.WriteString(string(param.Type))
+		}
+	}
+	builder.WriteString(")")
+	if len(m.ReturnTypes) > 0 {
+		builder.WriteString(" -> ")
+		for i, dt := range m.ReturnTypes {
+			if i > 0 {
+				builder.WriteString(", ")
+			}
+			builder.WriteString(string(dt))
+		}
+	}
+	return builder.String()
 }
 
 func (d *Document) collectFunction(name string, fn *ast.FunctionLiteral, pos ast.Position) {

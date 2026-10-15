@@ -23,6 +23,9 @@ func (d *Document) checkUndefinedNames(idx *Index) []Diagnostic {
 	for name := range d.classes {
 		defined[name] = true
 	}
+	for name := range d.interfaces {
+		defined[name] = true
+	}
 	for _, sym := range d.topLevels {
 		if sym.fn != nil && len(sym.fn.NameSegments) >= 2 {
 			defined[sym.fn.NameSegments[0]] = true
@@ -41,6 +44,12 @@ func (d *Document) checkUndefinedNames(idx *Index) []Diagnostic {
 	walk(d.Prog, func(node ast.Node) bool {
 		if class, ok := node.(*ast.ClassStmt); ok {
 			defined[class.Name] = true
+		}
+		if iface, ok := node.(*ast.InterfaceStmt); ok {
+			defined[iface.Name] = true
+			for _, embed := range iface.Embeds {
+				defined[embed] = true
+			}
 		}
 		return true
 	})

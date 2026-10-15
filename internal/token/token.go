@@ -78,27 +78,28 @@ const (
 	ELSEIF  Type = "ELSEIF"
 	END     Type = "END"
 
-	WHILE    Type = "WHILE"
-	LOOP     Type = "LOOP"
-	REPEAT   Type = "REPEAT"
-	UNTIL    Type = "UNTIL"
-	TIMES    Type = "TIMES"
-	BREAK    Type = "BREAK"
-	CONTINUE Type = "CONTINUE"
-	FORIN    Type = "FORIN"
-	INOF     Type = "INOF"
-	FUNCTION Type = "FUNCTION"
-	RETURN   Type = "RETURN"
-	IMPORT   Type = "IMPORT"
-	EXPORT   Type = "EXPORT"
-	DEFER    Type = "DEFER"
-	THROW    Type = "THROW"
-	CHECK    Type = "CHECK"
-	MEMBER   Type = "MEMBER"
-	CLASS    Type = "CLASS"
-	EMBED    Type = "EMBED"
-	DOT      Type = "DOT"
-	COLON    Type = "COLON"
+	WHILE     Type = "WHILE"
+	LOOP      Type = "LOOP"
+	REPEAT    Type = "REPEAT"
+	UNTIL     Type = "UNTIL"
+	TIMES     Type = "TIMES"
+	BREAK     Type = "BREAK"
+	CONTINUE  Type = "CONTINUE"
+	FORIN     Type = "FORIN"
+	INOF      Type = "INOF"
+	FUNCTION  Type = "FUNCTION"
+	RETURN    Type = "RETURN"
+	IMPORT    Type = "IMPORT"
+	EXPORT    Type = "EXPORT"
+	DEFER     Type = "DEFER"
+	THROW     Type = "THROW"
+	CHECK     Type = "CHECK"
+	MEMBER    Type = "MEMBER"
+	CLASS     Type = "CLASS"
+	INTERFACE Type = "INTERFACE"
+	EMBED     Type = "EMBED"
+	DOT       Type = "DOT"
+	COLON     Type = "COLON"
 )
 
 type Token struct {
@@ -174,6 +175,7 @@ var keywords = map[string]Type{
 	"自己":   SELF,
 	"类":    CLASS,
 	"模型":   CLASS,
+	"接口":   INTERFACE,
 	"嵌入":   EMBED,
 }
 

@@ -77,8 +77,8 @@ func toCompletionKind(kind analysis.SymbolKind) int {
 		return completionKindFunction
 	case analysis.KindMethod:
 		return completionKindMethod
-	case analysis.KindClass:
-		return completionKindClass
+	case analysis.KindClass, analysis.KindInterface:
+		return completionKindInterface
 	case analysis.KindField:
 		return completionKindField
 	case analysis.KindVariable, analysis.KindParameter:
