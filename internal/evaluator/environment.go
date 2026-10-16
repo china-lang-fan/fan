@@ -224,12 +224,21 @@ func checkDeclType(dt ast.DeclType, val object.Object, env *Environment) error {
 		if val.Kind() == object.KindNil {
 			return nil
 		}
+		// 自定义命名类型：身份必须严格一致（参考 Go）。
+		if named, ok := val.(*object.Named); ok && named.TypeName == string(dt) {
+			return nil
+		}
 		if inst, ok := val.(*Instance); ok && inst.Class.Name == string(dt) {
 			return nil
 		}
-		// 声明的类型名可能是接口：按方法集做结构化满足检查。
 		if env != nil {
-			if iface, ok := env.Runtime().lookupInterface(string(dt), env); ok {
+			rt := env.Runtime()
+			// 自定义命名类型：不允许隐式从底层类型赋值，需显式 类型名(值) 转换。
+			if _, isNamed := rt.namedTypes[string(dt)]; isNamed {
+				return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（需显式转换）", dt, val.Kind())
+			}
+			// 声明的类型名可能是接口：按方法集做结构化满足检查。
+			if iface, ok := rt.lookupInterface(string(dt), env); ok {
 				if name, ambiguous, satisfied := checkInterfaceSatisfied(iface, val, env); !satisfied {
 					if ambiguous {
 						return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（方法 %s 在嵌入链中有歧义）", dt, val.Kind(), name)

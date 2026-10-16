@@ -179,6 +179,11 @@ func evalCallExpr(node *ast.CallExpr, env *Environment) (object.Object, error) {
 		return applyFunction(callable, args, node.Position)
 	case *Class:
 		return callable.instantiate(env.Runtime(), node.Position, args)
+	case *NamedType:
+		if len(args) != 1 {
+			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("类型转换 %s 需要 1 个参数，实际 %d 个", callable.Name, len(args))}
+		}
+		return convertToNamed(callable, args[0], node.Position)
 	case tagsys.Callable:
 		return callTagsysCallable(callable, args, node.Position)
 	}

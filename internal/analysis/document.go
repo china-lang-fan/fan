@@ -22,6 +22,8 @@ type Document struct {
 	classes map[string]*Symbol
 	// interfaces 按接口名保存接口符号。
 	interfaces map[string]*Symbol
+	// namedTypes 按自定义类型名保存类型符号。
+	namedTypes map[string]*Symbol
 	// imports 按 导入时绑定的模块名 保存导入信息。
 	imports map[string]*importInfo
 	// fnRanges 记录函数体的行范围，供按光标位置找所在函数。
@@ -41,6 +43,7 @@ const (
 	KindMixfixFunction
 	KindClass
 	KindInterface
+	KindType
 	KindField
 	KindMethod
 	KindVariable
@@ -76,6 +79,7 @@ func ParseDocument(uri, source string) *Document {
 		byName:     map[string][]*Symbol{},
 		classes:    map[string]*Symbol{},
 		interfaces: map[string]*Symbol{},
+		namedTypes: map[string]*Symbol{},
 		imports:    map[string]*importInfo{},
 	}
 	if prog != nil {
@@ -207,6 +211,15 @@ func (d *Document) collectStatement(stmt ast.Statement, owner string) {
 		}
 		d.add(ifaceSym)
 		d.interfaces[s.Name] = ifaceSym
+	case *ast.TypeDefStmt:
+		sym := &Symbol{
+			Name: s.Name, Kind: KindType, Pos: s.Position,
+			EndPos: endOf(d.lines, s.Position),
+			Detail: string(s.BaseType),
+			Doc:    d.docBefore(s.Position.Line),
+		}
+		d.add(sym)
+		d.namedTypes[s.Name] = sym
 	case *ast.MethodDef:
 		sym := &Symbol{
 			Name: s.MethodName, Kind: KindMethod, Owner: s.ClassName,

@@ -45,12 +45,18 @@ func (r *primitiveMethodRegistry) register(kind string, name string, fn *Functio
 }
 
 func (r *primitiveMethodRegistry) lookup(value object.Object, name string) (*Function, bool) {
-	methods, ok := r.methods[runtimeTypeName(value)]
-	if !ok {
-		return nil, false
+	if methods, ok := r.methods[runtimeTypeName(value)]; ok {
+		if fn, ok := methods[name]; ok {
+			return fn, ok
+		}
 	}
-	fn, ok := methods[name]
-	return fn, ok
+	if named, ok := value.(*object.Named); ok {
+		if methods, ok := r.methods[runtimeTypeName(named.Value)]; ok {
+			fn, ok := methods[name]
+			return fn, ok
+		}
+	}
+	return nil, false
 }
 
 func (e *Environment) primitiveMethods() *primitiveMethodRegistry {

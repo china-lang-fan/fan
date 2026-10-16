@@ -26,6 +26,21 @@ func (s *InterfaceStmt) String() string {
 	return "接口 " + s.Name
 }
 
+// TypeDefStmt 声明一个自定义类型（参考 Go 的 type 定义）：
+//
+//	类型 状态 整数
+type TypeDefStmt struct {
+	Position Position
+	Name     string
+	BaseType DeclType
+}
+
+func (s *TypeDefStmt) Pos() Position  { return s.Position }
+func (s *TypeDefStmt) statementNode() {}
+func (s *TypeDefStmt) String() string {
+	return "类型 " + s.Name
+}
+
 // TypeTestExpr 是 “值 是 类型” 表达式，等价于 Java 的 instanceof。
 type TypeTestExpr struct {
 	Position Position

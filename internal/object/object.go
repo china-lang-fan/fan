@@ -61,6 +61,17 @@ func (b *Bool) Inspect() string {
 	return "假"
 }
 
+// Named 包装一个基本类型值，携带用户用“类型 名 底层类型”定义的类型名，
+// 参考 Go 中 type Status int 的身份语义：运算时按底层类型参与，
+// 类型判断/赋值检查时保留独立类型身份。
+type Named struct {
+	TypeName string
+	Value    Object
+}
+
+func (n *Named) Kind() Kind      { return n.Value.Kind() }
+func (n *Named) Inspect() string { return n.Value.Inspect() }
+
 type Nil struct{}
 
 func (n *Nil) Kind() Kind      { return KindNil }

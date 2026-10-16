@@ -79,6 +79,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return evalClassStmt(n, env)
 	case *ast.InterfaceStmt:
 		return evalInterfaceStmt(n, env)
+	case *ast.TypeDefStmt:
+		return evalTypeDefStmt(n, env)
 	case *ast.TypeTestExpr:
 		return evalTypeTestExpr(n, env)
 	case *ast.TypeCastExpr:
@@ -433,6 +435,8 @@ func evalOrExpr(expr *ast.BinaryExpr, env *Environment) (object.Object, error) {
 }
 
 func evalBinaryOp(expr *ast.BinaryExpr, left, right object.Object) (object.Object, error) {
+	left = unwrapNamed(left)
+	right = unwrapNamed(right)
 	op := expr.Op
 	pos := expr.Position
 
@@ -571,6 +575,8 @@ func evalMod(pos ast.Position, left, right object.Object) (object.Object, error)
 }
 
 func evalEq(pos ast.Position, left, right object.Object) (object.Object, error) {
+	left = unwrapNamed(left)
+	right = unwrapNamed(right)
 	if left.Kind() == object.KindError && right.Kind() == object.KindNil {
 		return object.False, nil
 	}
@@ -694,6 +700,7 @@ func evalUnaryExpr(expr *ast.UnaryExpr, env *Environment) (object.Object, error)
 		return nil, err
 	}
 	pos := expr.Position
+	right = unwrapNamed(right)
 	switch expr.Op {
 	case "-":
 		switch v := right.(type) {
@@ -713,6 +720,7 @@ func evalUnaryExpr(expr *ast.UnaryExpr, env *Environment) (object.Object, error)
 }
 
 func toFloat(o object.Object) *float64 {
+	o = unwrapNamed(o)
 	switch v := o.(type) {
 	case *object.Integer:
 		f := float64(v.Value)
@@ -728,6 +736,7 @@ func toFloat(o object.Object) *float64 {
 
 // intValue 把整数家族（整数、字节）转为 int64。
 func intValue(o object.Object) (int64, bool) {
+	o = unwrapNamed(o)
 	switch v := o.(type) {
 	case *object.Integer:
 		return v.Value, true
@@ -738,6 +747,7 @@ func intValue(o object.Object) (int64, bool) {
 }
 
 func isIntFamily(o object.Object) bool {
+	o = unwrapNamed(o)
 	switch o.(type) {
 	case *object.Integer, *object.Byte:
 		return true
@@ -796,6 +806,13 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 		args = append(args, v)
 	}
 	args = spreadTuples(args)
+	if named, ok := obj.(*object.Named); ok {
+		if namedType, exists := env.Runtime().namedTypes[named.TypeName]; exists {
+			if fn := namedType.lookupMethod(member.Name); fn != nil {
+				return applyFunction(fn, append([]object.Object{named}, args...), node.Position)
+			}
+		}
+	}
 	if fn, ok := env.primitiveMethods().lookup(obj, member.Name); ok {
 		return applyFunction(fn, append([]object.Object{obj}, args...), node.Position)
 	}
@@ -806,6 +823,15 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 			return nil, &EvalError{Pos: node.Position, Reason: err.Error()}
 		}
 		return applyFunction(fn, args, node.Position)
+	case *object.Named:
+		if namedType, ok := env.Runtime().namedTypes[target.TypeName]; ok {
+			fn := namedType.lookupMethod(member.Name)
+			if fn == nil {
+				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有方法 %s", target.TypeName, member.Name)}
+			}
+			return applyFunction(fn, append([]object.Object{target}, args...), node.Position)
+		}
+		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有方法 %s", target.TypeName, member.Name)}
 	case *object.Array:
 		return evalArrayMethod(node.Position, target, member.Name, args)
 	case *object.Module:

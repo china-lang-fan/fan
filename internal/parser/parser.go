@@ -177,6 +177,10 @@ func (p *Parser) parseStatement() ast.Statement {
 			return p.parseFunctionStatement()
 		case p.cur.Type == token.CLASS:
 			return p.parseClassStatement()
+		case p.cur.Type == token.INTERFACE:
+			return p.parseInterfaceStatement()
+		case p.cur.Type == token.TYPEDEF:
+			return p.parseTypeDefStatement()
 		case p.cur.Type == token.IDENT && p.peek.Type == token.MEMBER:
 			return p.parseIdentMemberStatement()
 		case p.cur.Type == token.IDENT && isTypeToken(p.peek.Type) && p.peekTwo().Type == token.MEMBER:
@@ -194,6 +198,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseClassStatement()
 	case p.cur.Type == token.INTERFACE:
 		return p.parseInterfaceStatement()
+	case p.cur.Type == token.TYPEDEF:
+		return p.parseTypeDefStatement()
 	case p.cur.Type == token.IDENT && p.peek.Type == token.MEMBER:
 		return p.parseIdentMemberStatement()
 	case p.cur.Type == token.IDENT && isTypeToken(p.peek.Type) && p.peekTwo().Type == token.MEMBER:
@@ -1315,6 +1321,10 @@ func (p *Parser) parseExportStatement() ast.Statement {
 		inner = p.parseFunctionStatement()
 	case token.CLASS:
 		inner = p.parseClassStatement()
+	case token.INTERFACE:
+		inner = p.parseInterfaceStatement()
+	case token.TYPEDEF:
+		inner = p.parseTypeDefStatement()
 	case token.IDENT:
 		if p.peek.Type == token.MEMBER {
 			inner = p.parseMethodDefinition()
@@ -1326,6 +1336,10 @@ func (p *Parser) parseExportStatement() ast.Statement {
 			inner = p.parseFunctionStatement()
 		case p.cur.Type == token.CLASS:
 			inner = p.parseClassStatement()
+		case p.cur.Type == token.INTERFACE:
+			inner = p.parseInterfaceStatement()
+		case p.cur.Type == token.TYPEDEF:
+			inner = p.parseTypeDefStatement()
 		case p.cur.Type == token.IDENT && p.peek.Type == token.MEMBER:
 			inner = p.parseMethodDefinition()
 		default:
@@ -1353,6 +1367,10 @@ func exportedName(stmt ast.Statement) string {
 	case *ast.VarDecl:
 		return n.Name
 	case *ast.ClassStmt:
+		return n.Name
+	case *ast.InterfaceStmt:
+		return n.Name
+	case *ast.TypeDefStmt:
 		return n.Name
 	case *ast.MethodDef:
 		return n.MethodName
@@ -1962,6 +1980,28 @@ func (p *Parser) parseClassStatement() ast.Statement {
 			return nil
 		}
 	}
+}
+
+func (p *Parser) parseTypeDefStatement() ast.Statement {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	p.next()
+	if p.cur.Type != token.IDENT {
+		p.addError(p.cur, "类型 声明需要名字")
+		return nil
+	}
+	name := p.cur.Literal
+	p.next()
+	if !isTypeToken(p.cur.Type) {
+		p.addError(p.cur, "类型 %s 需要一个底层基本类型，实际：%q", name, p.cur.Literal)
+		return nil
+	}
+	baseType := parseDeclType(p.cur.Type)
+	p.next()
+	if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF {
+		p.addError(p.cur, "类型声明后应换行，实际：%q", p.cur.Type)
+		return nil
+	}
+	return &ast.TypeDefStmt{Position: pos, Name: name, BaseType: baseType}
 }
 
 func (p *Parser) parseInterfaceStatement() ast.Statement {

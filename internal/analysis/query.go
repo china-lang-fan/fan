@@ -394,6 +394,9 @@ func (idx *Index) localType(name string) (ast.DeclType, bool) {
 	if _, ok := idx.root.interfaces[name]; ok {
 		return ast.DeclType(name), true
 	}
+	if _, ok := idx.root.namedTypes[name]; ok {
+		return ast.DeclType(name), true
+	}
 	if syms := idx.root.byName[name]; len(syms) > 0 {
 		return ast.DeclType(syms[len(syms)-1].Detail), true
 	}
@@ -557,7 +560,7 @@ func isPrimitiveType(name string) bool {
 var CompletionKeywords = []string{
 	"函数", "变量", "常量", "返回", "如果", "那么", "否则如果", "否则", "结束",
 	"当", "循环", "重复", "直到", "遍历", "中的", "跳出", "继续",
-	"判断", "当", "其他", "模型", "类", "接口", "嵌入", "方法", "自己",
+	"判断", "当", "其他", "模型", "类", "接口", "类型", "嵌入", "方法", "自己",
 	"导入", "导出", "作为", "稍后", "抛出", "检查", "捕获",
 	"是", "转为",
 	"整数", "小数", "字符串", "布尔", "数组", "字典", "字节", "字符", "真", "假", "空",

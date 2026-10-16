@@ -12,6 +12,7 @@ var typeKeywords = map[string]bool{}
 func init() {
 	for _, name := range []string{
 		"长度", "追加", "打印", "错误", "注册标签处理", "捕获",
+		"type", "len", "append", "error",
 	} {
 		builtinNames[name] = true
 	}

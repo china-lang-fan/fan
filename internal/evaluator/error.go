@@ -63,7 +63,13 @@ func unwrapCheckSignal(err error) (*object.Error, bool) {
 	return nil, false
 }
 
-func zeroValueForType(dt ast.DeclType) object.Object {
+func zeroValueForType(dt ast.DeclType, env *Environment) object.Object {
+	if env != nil {
+		if namedType, ok := env.Runtime().namedTypes[string(dt)]; ok {
+			base := zeroValueForType(namedType.BaseType, nil)
+			return &object.Named{TypeName: namedType.Name, Value: base}
+		}
+	}
 	switch dt {
 	case ast.TypeInt:
 		return &object.Integer{}

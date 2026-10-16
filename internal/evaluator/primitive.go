@@ -52,6 +52,9 @@ func builtinType(pos ast.Position, args []object.Object) (object.Object, error) 
 }
 
 func runtimeTypeName(value object.Object) string {
+	if named, ok := value.(*object.Named); ok {
+		return named.TypeName
+	}
 	switch value.(type) {
 	case *object.Integer:
 		return "integer"

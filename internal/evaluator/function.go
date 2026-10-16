@@ -296,7 +296,7 @@ func zeroFunctionResult(fn *Function, pos ast.Position) (object.Object, error) {
 	}
 	values := make([]object.Object, len(fn.ReturnTypes))
 	for i, dt := range fn.ReturnTypes {
-		values[i] = zeroValueForType(dt)
+		values[i] = zeroValueForType(dt, fn.Env)
 	}
 	return coerceReturnValues(pos, fn.ReturnTypes, values, fn.Env)
 }
@@ -311,7 +311,7 @@ func (f *Function) checkReturn(cause *object.Error) ([]object.Object, error) {
 	}
 	values := make([]object.Object, len(f.ReturnTypes))
 	for i, dt := range f.ReturnTypes[:len(f.ReturnTypes)-1] {
-		values[i] = zeroValueForType(dt)
+		values[i] = zeroValueForType(dt, f.Env)
 	}
 	values[len(values)-1] = cause
 	return values, nil

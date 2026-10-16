@@ -144,6 +144,8 @@ func checkInterfaceSatisfied(iface *Interface, value object.Object, env *Environ
 	switch v := value.(type) {
 	case *Instance:
 		methods = classMethodSet(v.Class, map[string]bool{})
+	case *object.Named:
+		methods = namedMethodSet(v, env)
 	default:
 		methods = primitiveMethodSet(value, env)
 	}
@@ -185,6 +187,9 @@ func valueIsType(value object.Object, typeName string, env *Environment) bool {
 		value = object.Null
 	}
 	if kind, ok := primitiveKindFromName(typeName); ok {
+		if named, isNamed := value.(*object.Named); isNamed {
+			return runtimeTypeName(named.Value) == kind
+		}
 		return runtimeTypeName(value) == kind
 	}
 	if value.Kind() == object.KindNil {
@@ -192,11 +197,20 @@ func valueIsType(value object.Object, typeName string, env *Environment) bool {
 		case "空", "错误":
 			return true
 		}
-		// 空 可赋给任何接口；名义模型类型不匹配。
+		// 空 可赋给任何接口；名义模型/命名类型不匹配。
 		if iface, ok := env.Runtime().lookupInterface(typeName, env); ok {
 			_, _, satisfied := checkInterfaceSatisfied(iface, value, env)
 			return satisfied
 		}
+		return false
+	}
+	// 自定义命名类型：身份严格一致。
+	if named, ok := value.(*object.Named); ok {
+		if named.TypeName == typeName {
+			return true
+		}
+	}
+	if _, isNamed := env.Runtime().namedTypes[typeName]; isNamed {
 		return false
 	}
 	if inst, ok := value.(*Instance); ok {
@@ -254,11 +268,25 @@ func evalTypeCastExpr(expr *ast.TypeCastExpr, env *Environment) (object.Object, 
 	if value == nil {
 		value = object.Null
 	}
+	// 目标是自定义命名类型：同身份成功；否则尝试按底层类型转换并包装。
+	if namedType, ok := env.Runtime().namedTypes[expr.TypeName]; ok {
+		if named, isNamedVal := value.(*object.Named); isNamedVal && named.TypeName == expr.TypeName {
+			return &object.Tuple{Values: []object.Object{value, object.True}}, nil
+		}
+		if converted, err := convertToNamed(namedType, value, expr.Position); err == nil {
+			return &object.Tuple{Values: []object.Object{converted, object.True}}, nil
+		}
+		return &object.Tuple{Values: []object.Object{object.Null, object.False}}, nil
+	}
 	if valueIsType(value, expr.TypeName, env) {
 		return &object.Tuple{Values: []object.Object{value, object.True}}, nil
 	}
 	// 基本类型按 Go 风格做值转换（不抛错，失败返回 空、假）。
 	if kind, ok := primitiveKindFromName(expr.TypeName); ok {
+		// 命名类型值先解包到底层值再转换。
+		if named, isNamed := value.(*object.Named); isNamed {
+			value = named.Value
+		}
 		if converted, ok := convertToPrimitiveKind(value, kind); ok {
 			return &object.Tuple{Values: []object.Object{converted, object.True}}, nil
 		}
@@ -268,6 +296,12 @@ func evalTypeCastExpr(expr *ast.TypeCastExpr, env *Environment) (object.Object, 
 
 // convertToPrimitiveKind 在类型断言场景做基本类型值转换。
 func convertToPrimitiveKind(value object.Object, kind string) (object.Object, bool) {
+	if kind == "" {
+		return nil, false
+	}
+	if runtimeTypeName(value) == kind {
+		return value, true
+	}
 	switch kind {
 	case "integer":
 		switch v := value.(type) {
@@ -401,6 +435,23 @@ func mergeAmbiguous(sets []map[string]methodInfo) map[string]methodInfo {
 		if n >= 2 {
 			out[name] = methodInfo{ambiguous: true}
 		}
+	}
+	return out
+}
+
+// namedMethodSet 收集自定义命名类型上定义的方法（接收者不计入参数数量）。
+func namedMethodSet(value *object.Named, env *Environment) map[string]methodInfo {
+	out := map[string]methodInfo{}
+	namedType, ok := env.Runtime().namedTypes[value.TypeName]
+	if !ok {
+		return out
+	}
+	for name, fn := range namedType.Methods {
+		arity := len(fn.Params)
+		if arity > 0 {
+			arity-- // 接收者
+		}
+		out[name] = methodInfo{arity: arity}
 	}
 	return out
 }

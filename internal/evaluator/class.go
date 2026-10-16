@@ -90,10 +90,27 @@ func evalMethodDef(stmt *ast.MethodDef, env *Environment) (object.Object, error)
 	if !ok {
 		return nil, &EvalError{Pos: stmt.Position, Reason: fmt.Sprintf("模型 %s 未定义", stmt.ClassName)}
 	}
-	cls, ok := val.(*Class)
-	if !ok {
-		return nil, &EvalError{Pos: stmt.Position, Reason: fmt.Sprintf("%s 不是模型", stmt.ClassName)}
+	switch owner := val.(type) {
+	case *Class:
+		return evalClassMethodDef(stmt, env, owner)
+	case *NamedType:
+		fn := &Function{
+			Params:      append([]ast.Parameter(nil), stmt.Function.Params...),
+			Body:        stmt.Function.Body,
+			Env:         env,
+			Name:        stmt.MethodName,
+			ReturnTypes: stmt.Function.ReturnTypes,
+		}
+		if err := processFunctionTags(env.Runtime(), fn, stmt.Function.Tags, env); err != nil {
+			return nil, err
+		}
+		owner.Methods[stmt.MethodName] = fn
+		return object.Null, nil
 	}
+	return nil, &EvalError{Pos: stmt.Position, Reason: fmt.Sprintf("%s 不是模型或自定义类型", stmt.ClassName)}
+}
+
+func evalClassMethodDef(stmt *ast.MethodDef, env *Environment, cls *Class) (object.Object, error) {
 	fn := &Function{
 		Params:      append([]ast.Parameter(nil), stmt.Function.Params...),
 		Body:        stmt.Function.Body,
@@ -271,6 +288,13 @@ func evalFieldAccess(node *ast.MemberExpr, env *Environment, obj object.Object) 
 			return &object.String{Value: target.Trace()}, nil
 		}
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("错误 没有成员 %s", node.Name)}
+	case *object.Named:
+		if namedType, ok := env.Runtime().namedTypes[target.TypeName]; ok {
+			if fn := namedType.lookupMethod(node.Name); fn != nil {
+				return fn, nil
+			}
+		}
+		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有成员 %s", target.TypeName, node.Name)}
 	case *runtimeTagContext:
 		return target.member(node.Name)
 	case *Function:

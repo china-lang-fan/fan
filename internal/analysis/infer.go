@@ -72,6 +72,10 @@ func (idx *Index) inferCallType(call *ast.CallExpr, locals map[string]string) st
 		if _, ok := idx.root.classes[ident.Name]; ok {
 			return ident.Name
 		}
+		// 自定义类型转换：状态(0) 推断为 状态
+		if _, ok := idx.root.namedTypes[ident.Name]; ok {
+			return ident.Name
+		}
 		// 普通函数返回类型
 		if syms := idx.root.byName[ident.Name]; len(syms) > 0 {
 			sym := syms[len(syms)-1]

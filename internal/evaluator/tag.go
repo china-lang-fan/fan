@@ -451,7 +451,7 @@ func initialCallable(target tagsys.Target) tagsys.Callable {
 func callTagsysCallable(callable tagsys.Callable, args []object.Object, pos ast.Position) (object.Object, error) {
 	callArgs := make([]tagsys.Object, len(args))
 	for i, arg := range args {
-		callArgs[i] = arg
+		callArgs[i] = unwrapNamed(arg)
 	}
 	results, err := callable.Call(callArgs)
 	if err != nil {

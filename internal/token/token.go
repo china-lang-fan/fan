@@ -99,6 +99,7 @@ const (
 	MEMBER    Type = "MEMBER"
 	CLASS     Type = "CLASS"
 	INTERFACE Type = "INTERFACE"
+	TYPEDEF   Type = "TYPEDEF"
 	EMBED     Type = "EMBED"
 	DOT       Type = "DOT"
 	COLON     Type = "COLON"
@@ -180,6 +181,7 @@ var keywords = map[string]Type{
 	"类":    CLASS,
 	"模型":   CLASS,
 	"接口":   INTERFACE,
+	"类型":   TYPEDEF,
 	"嵌入":   EMBED,
 }
 

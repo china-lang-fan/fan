@@ -252,3 +252,27 @@ func TestTypeTestAndCastNoUndefined(t *testing.T) {
 		t.Fatalf("是/转为 不应产生未定义告警：%#v", d)
 	}
 }
+
+func TestTypeDefSymbols(t *testing.T) {
+	src := `类型 状态 整数
+常量 状态 有效 = 状态(1)
+
+函数 取状态() -> 状态
+    返回 状态(1)
+结束
+
+变量 s = 取状态()
+如果 s 是 状态 那么
+    打印("ok")
+结束
+`
+	diags := Analyze(src)
+	if d := findCode(diags, "undefined-name"); d != nil {
+		t.Fatalf("自定义类型相关名字不应报未定义：%#v", d)
+	}
+	doc := ParseDocument("file:///t.凡", src)
+	sym := doc.namedTypes["状态"]
+	if sym == nil || sym.Kind != KindType || sym.Detail != "整数" {
+		t.Fatalf("自定义类型符号错误：%#v", sym)
+	}
+}
