@@ -19,7 +19,11 @@ const (
 	PREC_OR
 	PREC_AND
 	PREC_EQUALS
+	PREC_BIT_OR
+	PREC_BIT_XOR
+	PREC_BIT_AND
 	PREC_COMPARE
+	PREC_SHIFT
 	PREC_SUM
 	PREC_PRODUCT
 	PREC_PREFIX
@@ -30,6 +34,11 @@ var precedences = map[token.Type]precedence{
 	token.QUEST:   PREC_TERNARY,
 	token.OR:      PREC_OR,
 	token.AND:     PREC_AND,
+	token.BOR:     PREC_BIT_OR,
+	token.BXOR:    PREC_BIT_XOR,
+	token.BAND:    PREC_BIT_AND,
+	token.SHL:     PREC_SHIFT,
+	token.SHR:     PREC_SHIFT,
 	token.EQ:      PREC_EQUALS,
 	token.NEQ:     PREC_EQUALS,
 	token.LT:      PREC_COMPARE,
@@ -1044,7 +1053,7 @@ func (p *Parser) parsePrefix() ast.Expression {
 			return nil
 		}
 		return &ast.UnaryExpr{Position: pos, Op: op, Right: right}
-	case token.NOT:
+	case token.NOT, token.BNOT:
 		op := p.cur.Literal
 		p.next()
 		right := p.parseExpression(PREC_PREFIX)

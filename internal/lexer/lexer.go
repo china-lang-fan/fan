@@ -141,20 +141,32 @@ func (l *Lexer) NextToken() token.Token {
 		if l.peek(1) == '=' {
 			return l.emitAndAdvanceN(token.LTE, "<=", 2)
 		}
+		if l.peek(1) == '<' {
+			return l.emitAndAdvanceN(token.SHL, "<<", 2)
+		}
 		return l.emitAndAdvance(token.LT, "<")
 	case '>':
 		if l.peek(1) == '=' {
 			return l.emitAndAdvanceN(token.GTE, ">=", 2)
+		}
+		if l.peek(1) == '>' {
+			return l.emitAndAdvanceN(token.SHR, ">>", 2)
 		}
 		return l.emitAndAdvance(token.GT, ">")
 	case '&':
 		if l.peek(1) == '&' {
 			return l.emitAndAdvanceN(token.AND, "&&", 2)
 		}
+		return l.emitAndAdvance(token.BAND, "&")
 	case '|':
 		if l.peek(1) == '|' {
 			return l.emitAndAdvanceN(token.OR, "||", 2)
 		}
+		return l.emitAndAdvance(token.BOR, "|")
+	case '^':
+		return l.emitAndAdvance(token.BXOR, "^")
+	case '~':
+		return l.emitAndAdvance(token.BNOT, "~")
 	}
 
 	tok := l.emit(token.ILLEGAL, string(r))

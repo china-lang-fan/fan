@@ -40,6 +40,13 @@ const (
 	OR  Type = "OR"
 	NOT Type = "NOT"
 
+	BAND Type = "BAND"
+	BOR  Type = "BOR"
+	BXOR Type = "BXOR"
+	BNOT Type = "BNOT"
+	SHL  Type = "SHL"
+	SHR  Type = "SHR"
+
 	LPAREN Type = "LPAREN"
 	RPAREN Type = "RPAREN"
 	LBRACK Type = "LBRACK"
@@ -152,6 +159,12 @@ var keywords = map[string]Type{
 	"且":    AND,
 	"或":    OR,
 	"非":    NOT,
+	"位与":   BAND,
+	"位或":   BOR,
+	"异或":   BXOR,
+	"位取反":  BNOT,
+	"左移":   SHL,
+	"右移":   SHR,
 	"判断":   SWITCH,
 	"其他":   DEFAULT,
 	"如果":   IF,

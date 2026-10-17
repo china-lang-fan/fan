@@ -471,6 +471,16 @@ func evalBinaryOp(expr *ast.BinaryExpr, left, right object.Object) (object.Objec
 		return evalAnd(pos, left, right)
 	case "或", "||":
 		return evalOr(pos, left, right)
+	case "位与", "&":
+		return evalBitwiseBinary(pos, left, right, "位与")
+	case "位或", "|":
+		return evalBitwiseBinary(pos, left, right, "位或")
+	case "异或", "^":
+		return evalBitwiseBinary(pos, left, right, "异或")
+	case "左移", "<<":
+		return evalBitwiseBinary(pos, left, right, "左移")
+	case "右移", ">>":
+		return evalBitwiseBinary(pos, left, right, "右移")
 	default:
 		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("未知运算符：%s", op)}
 	}
@@ -572,6 +582,46 @@ func evalMod(pos ast.Position, left, right object.Object) (object.Object, error)
 		return nil, &EvalError{Pos: pos, Reason: "除数不能为零"}
 	}
 	return &object.Integer{Value: lv % rv}, nil
+}
+
+func evalBitwiseBinary(pos ast.Position, left, right object.Object, op string) (object.Object, error) {
+	lv, lok := intValue(left)
+	rv, rok := intValue(right)
+	if !lok || !rok {
+		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("%s仅支持整数家族（整数/字节），实际 %s 与 %s", op, left.Kind(), right.Kind())}
+	}
+	var result int64
+	switch op {
+	case "位与":
+		result = lv & rv
+	case "位或":
+		result = lv | rv
+	case "异或":
+		result = lv ^ rv
+	case "左移":
+		if rv < 0 {
+			return nil, &EvalError{Pos: pos, Reason: "左移位数不能为负"}
+		}
+		if rv > 63 {
+			result = 0
+		} else {
+			result = lv << uint(rv)
+		}
+	case "右移":
+		if rv < 0 {
+			return nil, &EvalError{Pos: pos, Reason: "右移位数不能为负"}
+		}
+		if rv > 63 {
+			if lv < 0 {
+				result = -1
+			}
+		} else {
+			result = lv >> uint(rv)
+		}
+	default:
+		return nil, &EvalError{Pos: pos, Reason: "未知位运算：" + op}
+	}
+	return &object.Integer{Value: result}, nil
 }
 
 func evalEq(pos ast.Position, left, right object.Object) (object.Object, error) {
@@ -710,6 +760,11 @@ func evalUnaryExpr(expr *ast.UnaryExpr, env *Environment) (object.Object, error)
 			return &object.Float{Value: -v.Value}, nil
 		}
 		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("负号不支持 %s", right.Kind())}
+	case "位取反", "~":
+		if n, ok := intValue(right); ok {
+			return &object.Integer{Value: ^n}, nil
+		}
+		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("位取反仅支持整数家族，实际是 %s", right.Kind())}
 	case "非", "!":
 		if right.Kind() != object.KindBool {
 			return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("非 必须是布尔，实际是 %s", right.Kind())}
