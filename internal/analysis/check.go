@@ -119,6 +119,11 @@ func checkExprUndefined(expr ast.Expression, globals map[string]bool) []Diagnost
 		if _, ok := node.(*ast.FunctionLiteral); ok && node != expr {
 			return false
 		}
+		// “通过 模块 …”中的标识符属于模块作用域，跳过整个内部表达式。
+		if through, ok := node.(*ast.ThroughExpr); ok && node != expr {
+			_ = through
+			return false
+		}
 		ident, ok := node.(*ast.Identifier)
 		if !ok {
 			return true

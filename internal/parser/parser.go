@@ -1011,6 +1011,8 @@ func (p *Parser) parsePrefix() ast.Expression {
 		return node
 	case token.CHECK:
 		return p.parseCheckExpression()
+	case token.THROUGH:
+		return p.parseThroughExpression()
 	case token.IDENT, token.SELF:
 		if p.isReadabilityPrefix() {
 			p.next()
@@ -1404,7 +1406,7 @@ func declaredName(stmt ast.Statement) string {
 }
 
 func (p *Parser) isReadabilityPrefix() bool {
-	if p.cur.Type != token.IDENT || (p.cur.Literal != "通过" && p.cur.Literal != "从") {
+	if p.cur.Type != token.IDENT || p.cur.Literal != "从" {
 		return false
 	}
 	if p.peek.Type == token.LPAREN || p.peek.Type == token.ASSIGN || p.peek.Type == token.COMMA ||
@@ -1431,6 +1433,23 @@ func (p *Parser) parseCheckExpression() ast.Expression {
 		return nil
 	}
 	return &ast.CheckExpr{Position: pos, Call: call}
+}
+
+func (p *Parser) parseThroughExpression() ast.Expression {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	p.next() // 跳过 通过
+	if p.cur.Type != token.IDENT {
+		p.addError(p.cur, "通过 后应为模块名")
+		return nil
+	}
+	moduleName := p.cur.Literal
+	p.next()
+	expr := p.parseExpression(LOWEST)
+	if expr == nil {
+		p.addError(p.cur, "通过 %s 后应为表达式", moduleName)
+		return nil
+	}
+	return &ast.ThroughExpr{Position: pos, ModuleName: moduleName, Expr: expr}
 }
 
 func (p *Parser) parseDeferStatement() ast.Statement {

@@ -298,9 +298,9 @@ func TestTagCreationDoesNotCallInit(t *testing.T) {
 结束
 @标记("测试")
 定义 函数 测试()
-    返回 通过
+    返回 通行
 结束
-变量 通过 = 真
+变量 通行 = 真
 测试()`
 	mustBool(t, src, true)
 }

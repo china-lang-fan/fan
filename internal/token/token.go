@@ -102,6 +102,7 @@ const (
 	PUBLIC    Type = "PUBLIC"
 	PRIVATE   Type = "PRIVATE"
 	DEFER     Type = "DEFER"
+	THROUGH   Type = "THROUGH"
 	THROW     Type = "THROW"
 	CHECK     Type = "CHECK"
 	MEMBER    Type = "MEMBER"
@@ -188,6 +189,7 @@ var keywords = map[string]Type{
 	"公开":   PUBLIC,
 	"私有":   PRIVATE,
 	"稍后":   DEFER,
+	"通过":   THROUGH,
 	"抛出":   THROW,
 	"检查":   CHECK,
 	"的":    MEMBER,

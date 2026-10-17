@@ -25,6 +25,10 @@ type Environment struct {
 	primitiveRegistry *primitiveMethodRegistry
 	mixfixRegistry    *mixfixFunctionRegistry
 	currentFn         *Function
+	moduleName        string
+	throughModule     *object.Module
+	pendingVisibility ast.Visibility
+	pendingVisSet     bool
 }
 
 // NewEnvironment 创建一个绑定到新运行实例的根环境。
@@ -123,6 +127,39 @@ func (e *Environment) find(name string) (*binding, bool) {
 		return e.outer.find(name)
 	}
 	return nil, false
+}
+
+// isModuleName 判断当前环境是否绑定了该模块。
+func (e *Environment) isModuleName(name string) bool {
+	b, ok := e.find(name)
+	if !ok {
+		return false
+	}
+	_, ok = b.value.(*object.Module)
+	return ok
+}
+
+// getModule 取出已导入的模块对象。
+func (e *Environment) getModule(name string) (*object.Module, error) {
+	b, ok := e.find(name)
+	if !ok {
+		return nil, fmt.Errorf("模块 %s 未导入", name)
+	}
+	if mod, ok := b.value.(*object.Module); ok {
+		return mod, nil
+	}
+	return nil, fmt.Errorf("%s 不是模块", name)
+}
+
+// throughModuleValue 沿外层链查找“通过”作用域绑定的模块。
+func (e *Environment) throughModuleValue() *object.Module {
+	if e.throughModule != nil {
+		return e.throughModule
+	}
+	if e.outer != nil {
+		return e.outer.throughModuleValue()
+	}
+	return nil
 }
 
 func (e *Environment) declare(name string, val object.Object, isConst bool, dt ast.DeclType) error {

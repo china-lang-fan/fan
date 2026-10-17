@@ -14,6 +14,20 @@ func (n *ImportStmt) String() string {
 	return fmt.Sprintf("导入 %q 作为 %s", n.Path, n.Name)
 }
 
+// ThroughExpr 是“通过 模块名 表达式”：在指定模块作用域内求值表达式，
+// 只能访问该模块的公开成员。
+type ThroughExpr struct {
+	Position   Position
+	ModuleName string
+	Expr       Expression
+}
+
+func (n *ThroughExpr) Pos() Position   { return n.Position }
+func (n *ThroughExpr) expressionNode() {}
+func (n *ThroughExpr) String() string {
+	return fmt.Sprintf("通过 %s %s", n.ModuleName, n.Expr.String())
+}
+
 // Visibility 表示声明的可见性。
 type Visibility int
 

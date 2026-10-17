@@ -403,6 +403,8 @@ func childrenOf(node ast.Node) []ast.Node {
 		addExpr(n.Value)
 	case *ast.CheckExpr:
 		addExpr(n.Call)
+	case *ast.ThroughExpr:
+		addExpr(n.Expr)
 	}
 	return children
 }

@@ -104,6 +104,9 @@ func collectLocalScopes(fn *ast.FunctionLiteral) map[*ast.Identifier]map[string]
 			return
 		case *ast.Identifier:
 			result[n] = visible()
+		case *ast.ThroughExpr:
+			// 模块作用域内的标识符不在本地作用域，跳过检查。
+			return
 		}
 		for _, child := range childrenOf(node) {
 			visit(child)

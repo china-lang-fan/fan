@@ -172,6 +172,14 @@ func evalCallExpr(node *ast.CallExpr, env *Environment) (object.Object, error) {
 	}
 	val, ok := env.get(ident.Name)
 	if !ok {
+		if mod := env.throughModuleValue(); mod != nil {
+			if exp, exists := mod.Exports[ident.Name]; exists {
+				val = exp
+				ok = true
+			}
+		}
+	}
+	if !ok {
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("未知函数：%s", ident.Name)}
 	}
 	switch callable := val.(type) {

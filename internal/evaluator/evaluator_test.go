@@ -233,7 +233,7 @@ func TestUndeclared(t *testing.T) {
 
 func TestReadablePrefixKeywords(t *testing.T) {
 	mustInt(t, "从 长度([1, 2, 3])", 3)
-	mustInt(t, "变量 数据 = [1, 2]\n通过 长度(数据)", 2)
+	mustInt(t, "变量 数据 = [1, 2]\n从 长度(数据)", 2)
 	mustInt(t, "变量 数据 = [7, 8]\n从 数据[0]", 7)
 }
 

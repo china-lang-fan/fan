@@ -181,3 +181,93 @@ func TestModuleResolvesFromConfiguredSdkDir(t *testing.T) {
 		t.Fatalf("SDK 模块内容错误：%s", mod.Exports["版本"].Inspect())
 	}
 }
+
+func writeTempModule(t *testing.T, name, src string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, name+".凡")
+	if err := os.WriteFile(path, []byte(src), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestCrossModuleMixfixFunction(t *testing.T) {
+	dir := writeTempModule(t, "数学工具", `
+公开 函数 求(数列 数组)的最大值() -> 整数
+    变量 结果 = 数列[0]
+    遍历 数列 中的 值
+        如果 值 > 结果 那么 结果 = 值 结束
+    结束
+    返回 结果
+结束
+`)
+	src := "导入 \"" + filepath.Join(dir, "数学工具") + "\" 作为 工具\n工具.求([3, 9, 2])的最大值()"
+	res, err := runModuleSource(t, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Inspect() != "9" {
+		t.Fatalf("跨模块分段函数结果错误：%s", res.Inspect())
+	}
+}
+
+func TestCrossModuleMixfixMustBePublic(t *testing.T) {
+	dir := writeTempModule(t, "数学工具", `
+函数 求(数列 数组)的最大值() -> 整数
+    返回 数列[0]
+结束
+`)
+	src := "导入 \"" + filepath.Join(dir, "数学工具") + "\" 作为 工具\n工具.求([3, 9])的最大值()"
+	if _, err := runModuleSource(t, src); err == nil {
+		t.Fatal("非公开分段函数不应跨模块调用")
+	}
+}
+
+func TestThroughModuleNormalFunction(t *testing.T) {
+	dir := writeTempModule(t, "数学工具", `
+公开 函数 最大值(数列 数组) -> 整数
+    变量 结果 = 数列[0]
+    遍历 数列 中的 值
+        如果 值 > 结果 那么 结果 = 值 结束
+    结束
+    返回 结果
+结束
+`)
+	src := "导入 \"" + filepath.Join(dir, "数学工具") + "\" 作为 工具\n通过 工具 最大值([5, 1, 8])"
+	res, err := runModuleSource(t, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Inspect() != "8" {
+		t.Fatalf("通过 模块 普通函数结果错误：%s", res.Inspect())
+	}
+}
+
+func TestThroughModuleMixfixFunction(t *testing.T) {
+	dir := writeTempModule(t, "数学工具", `
+公开 函数 求(数列 数组)的最大值() -> 整数
+    返回 数列[0]
+结束
+`)
+	src := "导入 \"" + filepath.Join(dir, "数学工具") + "\" 作为 工具\n通过 工具 求([4, 1])的最大值()"
+	res, err := runModuleSource(t, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Inspect() != "4" {
+		t.Fatalf("通过 模块 分段函数结果错误：%s", res.Inspect())
+	}
+}
+
+func TestThroughModuleRejectsPrivate(t *testing.T) {
+	dir := writeTempModule(t, "数学工具", `
+函数 内部() -> 整数
+    返回 1
+结束
+`)
+	src := "导入 \"" + filepath.Join(dir, "数学工具") + "\" 作为 工具\n通过 工具 内部()"
+	if _, err := runModuleSource(t, src); err == nil {
+		t.Fatal("通过 模块 不应访问非公开函数")
+	}
+}

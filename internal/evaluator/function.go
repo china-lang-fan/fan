@@ -25,6 +25,10 @@ type Function struct {
 	MethodImpl   tagsys.Callable
 	Owner        *Class
 	Self         *Instance
+	// ModuleName 是分段函数定义所在模块（文件基名），空表示入口文件。
+	ModuleName string
+	// Public 表示该分段函数是否以 公开 声明、可跨模块调用。
+	Public bool
 }
 
 func (f *Function) Kind() object.Kind { return KindFunction }
@@ -77,7 +81,7 @@ func evalFunctionLiteral(node *ast.FunctionLiteral, env *Environment) (object.Ob
 }
 
 func evalMemberExpression(node *ast.MemberExpr, env *Environment) (object.Object, error) {
-	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
+	if chain, ok := collectMixfixCallChain(node, env); ok && (chain.moduleRoot != "" || env.mixfixFunctions().hasRoot(chain.root)) {
 		return evalMixfixCall(chain, env, node.Position)
 	}
 	obj, err := Eval(node.Object, env)

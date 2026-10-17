@@ -306,7 +306,7 @@ func TestDeferAndThrow(t *testing.T) {
 }
 
 func TestReadablePrefixKeywords(t *testing.T) {
-	prog := mustParse(t, "变量 x = 从 通过 f(1)")
+	prog := mustParse(t, "变量 x = 从 f(1)")
 	decl := prog.Statements[0].(*ast.VarDecl)
 	call, ok := decl.Value.(*ast.CallExpr)
 	if !ok {
@@ -314,6 +314,21 @@ func TestReadablePrefixKeywords(t *testing.T) {
 	}
 	if ident, ok := call.Callee.(*ast.Identifier); !ok || ident.Name != "f" {
 		t.Fatalf("协助关键字后的调用解析错误：%T", call.Callee)
+	}
+}
+
+func TestThroughExpression(t *testing.T) {
+	prog := mustParse(t, "通过 工具 求(数列)的最大值()")
+	expr, ok := prog.Statements[0].(*ast.ExpressionStmt)
+	if !ok {
+		t.Fatalf("应为表达式语句，实际 %T", prog.Statements[0])
+	}
+	through, ok := expr.Expression.(*ast.ThroughExpr)
+	if !ok {
+		t.Fatalf("应为 通过 表达式，实际 %T", expr.Expression)
+	}
+	if through.ModuleName != "工具" {
+		t.Fatalf("模块名错误：%s", through.ModuleName)
 	}
 }
 

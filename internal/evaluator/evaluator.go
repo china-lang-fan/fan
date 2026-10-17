@@ -121,6 +121,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return object.Null, nil
 	case *ast.Identifier:
 		return evalIdentifier(n, env)
+	case *ast.ThroughExpr:
+		return evalThroughExpr(n, env)
 	case *ast.MaybeCallExpr:
 		return evalMaybeCallExpr(n, env)
 	case *ast.TernaryExpr:
@@ -230,9 +232,14 @@ func evalVarDecl(decl *ast.VarDecl, env *Environment) (object.Object, error) {
 		if _, exists := env.find(root); exists {
 			return nil, &EvalError{Pos: decl.Position, Reason: fmt.Sprintf("分段函数首段名 %s 已被占用", root)}
 		}
+		fn.ModuleName = env.moduleName
+		fn.Public = env.pendingVisSet && env.pendingVisibility == ast.VisPublic
 		if err := env.mixfixFunctions().register(fn.NameSegments, fn.Signature, fn); err != nil {
 			return nil, &EvalError{Pos: decl.Position, Reason: err.Error()}
 		}
+	}
+	if env.pendingVisSet {
+		env.pendingVisSet = false
 	}
 	if decl.IsExplicit {
 		if err := env.declare(decl.Name, val, decl.IsConst, decl.DeclType); err != nil {
@@ -320,13 +327,18 @@ var _ = posPrefix
 func evalIdentifier(ident *ast.Identifier, env *Environment) (object.Object, error) {
 	val, ok := env.get(ident.Name)
 	if !ok {
+		if mod := env.throughModuleValue(); mod != nil {
+			if exp, exists := mod.Exports[ident.Name]; exists {
+				return exp, nil
+			}
+		}
 		return nil, fmt.Errorf("变量 %s 未声明", ident.Name)
 	}
 	return val, nil
 }
 
 func evalMaybeCallExpr(expr *ast.MaybeCallExpr, env *Environment) (object.Object, error) {
-	if chain, ok := collectMixfixCallChain(expr.Callee); ok && env.mixfixFunctions().hasRoot(chain.root) {
+	if chain, ok := collectMixfixCallChain(expr.Callee, env); ok && (chain.moduleRoot != "" || env.mixfixFunctions().hasRoot(chain.root)) {
 		return evalMixfixCall(chain, env, expr.Position)
 	}
 	if member, ok := expr.Callee.(*ast.MemberExpr); ok {
@@ -832,7 +844,7 @@ func evalCallExprDispatch(node *ast.CallExpr, env *Environment) (object.Object, 
 	if ident, ok := node.Callee.(*ast.Identifier); ok && ident.Name == "捕获" && len(node.Args) == 0 {
 		return evalRecover(env.Runtime()), nil
 	}
-	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
+	if chain, ok := collectMixfixCallChain(node, env); ok && (chain.moduleRoot != "" || env.mixfixFunctions().hasRoot(chain.root)) {
 		return evalMixfixCall(chain, env, node.Position)
 	}
 	if member, ok := node.Callee.(*ast.MemberExpr); ok {
@@ -842,7 +854,7 @@ func evalCallExprDispatch(node *ast.CallExpr, env *Environment) (object.Object, 
 }
 
 func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment) (object.Object, error) {
-	if chain, ok := collectMixfixCallChain(node); ok && env.mixfixFunctions().hasRoot(chain.root) {
+	if chain, ok := collectMixfixCallChain(node, env); ok && (chain.moduleRoot != "" || env.mixfixFunctions().hasRoot(chain.root)) {
 		return evalMixfixCall(chain, env, node.Position)
 	}
 	obj, err := Eval(member.Object, env)

@@ -158,6 +158,7 @@ func (l *Loader) Load(importerBase string, path string) (*object.Module, error) 
 	env.mixfixRegistry = mixfixRegistry
 	env.BaseDir = base
 	env.SourceFile = full
+	env.moduleName = moduleNameFromPath(full)
 	env.Loader = l
 	env.moduleExport = true
 
@@ -200,11 +201,26 @@ func evalImportStmt(stmt *ast.ImportStmt, env *Environment) (object.Object, erro
 	return mod, nil
 }
 
+// evalThroughExpr 在“通过 模块名 表达式”中以指定模块作用域求值表达式：
+// 普通函数从模块公开成员查找；分段函数只匹配该模块公开的定义。
+func evalThroughExpr(expr *ast.ThroughExpr, env *Environment) (object.Object, error) {
+	mod, err := env.getModule(expr.ModuleName)
+	if err != nil {
+		return nil, &EvalError{Pos: expr.Position, Reason: err.Error()}
+	}
+	scoped := NewEnclosedEnvironment(env)
+	scoped.throughModule = mod
+	return Eval(expr.Expr, scoped)
+}
+
 func evalVisibilityStmt(stmt *ast.VisibilityStmt, env *Environment) (object.Object, error) {
+	env.pendingVisibility = stmt.Visibility
+	env.pendingVisSet = true
 	res, err := Eval(stmt.Inner, env)
 	if err != nil {
 		return nil, err
 	}
+	env.pendingVisSet = false
 	if b, ok := env.find(stmt.Name); ok {
 		b.visibility = stmt.Visibility
 	}

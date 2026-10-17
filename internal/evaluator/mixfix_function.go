@@ -42,6 +42,7 @@ type mixfixCallSegment struct {
 
 type mixfixCallChain struct {
 	root       string
+	moduleRoot string
 	segments   []string
 	connectors []string
 	groupSize  []int
@@ -53,17 +54,33 @@ func (r *mixfixFunctionRegistry) lookup(root string, signature string) (*Functio
 	return fn, ok
 }
 
-func collectMixfixCallChain(node ast.Expression) (*mixfixCallChain, bool) {
+// lookupModule 仅在指定模块中查找公开的分段函数。
+func (r *mixfixFunctionRegistry) lookupModule(moduleName, root, signature string) (*Function, bool) {
+	fn, ok := r.roots[root][signature]
+	if !ok {
+		return nil, false
+	}
+	if fn.ModuleName != moduleName || !fn.Public {
+		return nil, false
+	}
+	return fn, true
+}
+
+// collectMixfixCallChain 识别分段函数调用链。env 用于区分“模块.根段(…)”
+// 这种跨模块调用与普通的对象方法链。
+func collectMixfixCallChain(node ast.Expression, env *Environment) (*mixfixCallChain, bool) {
 	current := node
 	var outward []mixfixCallSegment
 	var rootArgs []ast.Expression
+	moduleRoot := ""
+rootLoop:
 	for {
 		switch call := current.(type) {
 		case *ast.CallExpr:
 			if rootIdent, isRootIdent := call.Callee.(*ast.Identifier); isRootIdent {
 				rootArgs = call.Args
 				current = rootIdent
-				continue
+				break rootLoop
 			}
 			member, isMember := call.Callee.(*ast.MemberExpr)
 			if !isMember {
@@ -71,6 +88,13 @@ func collectMixfixCallChain(node ast.Expression) (*mixfixCallChain, bool) {
 			}
 			if member.Spaced {
 				return nil, false
+			}
+			// 链的最内层：模块.根段(参数)
+			if rootIdent, ok := member.Object.(*ast.Identifier); ok && env.isModuleName(rootIdent.Name) {
+				moduleRoot = rootIdent.Name
+				rootArgs = call.Args
+				current = &ast.Identifier{Name: member.Name}
+				break rootLoop
 			}
 			outward = append(outward, mixfixCallSegment{
 				connector: member.Connector,
@@ -102,16 +126,22 @@ func collectMixfixCallChain(node ast.Expression) (*mixfixCallChain, bool) {
 			})
 			current = call.Object
 		default:
-			goto root
+			return nil, false
 		}
 	}
-root:
 	rootIdent, ok := current.(*ast.Identifier)
 	if !ok || len(outward) == 0 {
 		return nil, false
 	}
+	// “通过 模块 根(…)的段(…)”：裸根在模块作用域内解析。
+	if moduleRoot == "" {
+		if mod := env.throughModuleValue(); mod != nil {
+			moduleRoot = mod.Name
+		}
+	}
 	chain := &mixfixCallChain{
 		root:       rootIdent.Name,
+		moduleRoot: moduleRoot,
 		segments:   []string{rootIdent.Name},
 		connectors: []string{""},
 		groupSize:  []int{len(rootArgs)},
@@ -149,8 +179,21 @@ func evalMixfixCall(chain *mixfixCallChain, env *Environment, pos ast.Position) 
 		values = append(values, spreadTuples(groupValues)...)
 	}
 	signature := buildRuntimeMixfixSignature(chain.segments, chain.connectors, chain.groupSize, values)
-	fn, ok := env.mixfixFunctions().lookup(chain.root, signature)
-	if !ok {
+	var fn *Function
+	var found bool
+	if scopedMod := env.throughModuleValue(); scopedMod != nil && chain.moduleRoot == scopedMod.Name {
+		// 通过 模块 根(…)的段(…)：在作用域模块的公开分段函数中匹配。
+		fn, found = env.mixfixFunctions().lookupModule(scopedMod.Name, chain.root, signature)
+	} else if chain.moduleRoot != "" {
+		mod, err := env.getModule(chain.moduleRoot)
+		if err != nil {
+			return nil, &EvalError{Pos: pos, Reason: err.Error()}
+		}
+		fn, found = env.mixfixFunctions().lookupModule(mod.Name, chain.root, signature)
+	} else {
+		fn, found = env.mixfixFunctions().lookup(chain.root, signature)
+	}
+	if !found {
 		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("找不到匹配的分段函数：%s", signature)}
 	}
 	return applyFunction(fn, values, pos)
