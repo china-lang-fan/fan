@@ -146,11 +146,18 @@ func resolveMemberFunction(value object.Object, member *ast.MemberExpr, env *Env
 	}
 	switch target := value.(type) {
 	case *Instance:
-		if field, ok := target.getField(member.Name); ok {
-			if vis, owner, _ := target.Class.fieldVisibility(member.Name); !memberAccessible(vis, owner, env) {
-				return nil, fmt.Errorf("%s 的私有字段 %s 不可在模型外访问", target.Class.Name, member.Name)
+		if embed := target.embedByName(member.Name); embed != nil {
+			return embed, nil
+		}
+		if r := target.resolveField(member.Name); r.found {
+			if r.ambiguous {
+				return nil, fmt.Errorf("%s 的字段 %s 在嵌入链中有歧义，需通过嵌入名限定访问", target.Class.Name, member.Name)
 			}
-			return field, nil
+			vis := ownerFieldVis(r.owner, member.Name)
+			if !memberAccessible(vis, r.owner, env, r.owner != target.Class) {
+				return nil, fmt.Errorf("%s 的私有字段 %s 不可在模型外访问", r.owner.Name, member.Name)
+			}
+			return r.value, nil
 		}
 		if fn, err := target.getMethod(member.Name, env); err == nil {
 			return fn, nil

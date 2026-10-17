@@ -943,10 +943,18 @@ func evalFieldAssign(node *ast.FieldAssignExpr, env *Environment) (object.Object
 	if !ok {
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 不支持字段赋值", obj.Kind())}
 	}
-	if vis, owner, _ := inst.Class.fieldVisibility(node.Name); !memberAccessible(vis, owner, env) {
-		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", inst.Class.Name, node.Name)}
+	r := inst.resolveField(node.Name)
+	if !r.found {
+		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有字段 %s", inst.Class.Name, node.Name)}
 	}
-	if err := inst.setField(node.Name, val); err != nil {
+	if r.ambiguous {
+		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的字段 %s 在嵌入链中有歧义，需通过嵌入名限定访问", inst.Class.Name, node.Name)}
+	}
+	vis := ownerFieldVis(r.owner, node.Name)
+	if !memberAccessible(vis, r.owner, env, r.owner != inst.Class) {
+		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", r.owner.Name, node.Name)}
+	}
+	if err := inst.setFieldValue(node.Name, val); err != nil {
 		return nil, &EvalError{Pos: node.Position, Reason: err.Error()}
 	}
 	return val, nil

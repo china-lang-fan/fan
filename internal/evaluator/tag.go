@@ -321,10 +321,11 @@ func builtinTagHandler(ctx tagsys.Context) error {
 	if !ok || tag.Class.Name != "内建" {
 		return fmt.Errorf("内建标签格式错误")
 	}
-	value, exists := tag.getField("值")
-	if !exists {
+	r := tag.resolveField("值")
+	if !r.found {
 		return fmt.Errorf("内建标签缺少值")
 	}
+	value := r.value
 	name, ok := value.(*object.String)
 	if !ok {
 		return fmt.Errorf("内建标签值必须是字符串")
@@ -352,17 +353,7 @@ func createTagInstance(rt *Runtime, cls *Class, tagNode *ast.TagExpr, env *Envir
 	if len(tagNode.Positional) > 1 {
 		return nil, fmt.Errorf("标签未命名参数最多一个")
 	}
-	inst := &Instance{Class: cls, Fields: map[string]object.Object{}}
-	for _, field := range cls.Fields {
-		inst.Fields[field.Name] = object.Null
-	}
-	for _, embed := range cls.Embeds {
-		for _, field := range embed.Fields {
-			if _, exists := inst.Fields[field.Name]; !exists {
-				inst.Fields[field.Name] = object.Null
-			}
-		}
-	}
+	inst := newZeroInstance(cls)
 	if len(tagNode.Positional) == 1 {
 		value, err := Eval(tagNode.Positional[0], env)
 		if err != nil {
@@ -371,10 +362,12 @@ func createTagInstance(rt *Runtime, cls *Class, tagNode *ast.TagExpr, env *Envir
 		if value == nil {
 			value = object.Null
 		}
-		if _, exists := inst.Fields["值"]; !exists {
+		if r := inst.resolveField("值"); !r.found {
 			return nil, fmt.Errorf("标签模型 %s 没有字段 值", cls.Name)
 		}
-		inst.Fields["值"] = value
+		if err := inst.setFieldValue("值", value); err != nil {
+			return nil, err
+		}
 	}
 	for _, arg := range tagNode.Named {
 		value, err := Eval(arg.Value, env)
@@ -384,10 +377,12 @@ func createTagInstance(rt *Runtime, cls *Class, tagNode *ast.TagExpr, env *Envir
 		if value == nil {
 			value = object.Null
 		}
-		if _, exists := inst.Fields[arg.Name]; !exists {
+		if r := inst.resolveField(arg.Name); !r.found {
 			return nil, fmt.Errorf("标签模型 %s 没有字段 %s", cls.Name, arg.Name)
 		}
-		inst.Fields[arg.Name] = value
+		if err := inst.setFieldValue(arg.Name, value); err != nil {
+			return nil, err
+		}
 	}
 	return inst, nil
 }

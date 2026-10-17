@@ -62,6 +62,8 @@ type Symbol struct {
 	EndPos   ast.Position
 	Owner    string // 字段/方法所属模型，或模块名
 	Children []*Symbol
+	// Embeds 记录模型嵌入的类型名（按声明顺序）。
+	Embeds []string
 
 	// 函数符号专用
 	fn *ast.FunctionLiteral
@@ -183,6 +185,7 @@ func (d *Document) collectStatement(stmt ast.Statement, owner string) {
 			Name: s.Name, Kind: KindClass, Pos: s.Position,
 			EndPos: endOf(d.lines, s.Position),
 			Doc:    d.docBefore(s.Position.Line),
+			Embeds: append([]string(nil), s.Embeds...),
 		}
 		for _, field := range s.Fields {
 			classSym.Children = append(classSym.Children, &Symbol{

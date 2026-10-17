@@ -276,3 +276,76 @@ func TestTypeDefSymbols(t *testing.T) {
 		t.Fatalf("自定义类型符号错误：%#v", sym)
 	}
 }
+
+func TestEmbedAmbiguityDiagnostic(t *testing.T) {
+	src := `
+定义 模型 左件
+    公开 变量 整数 宽度
+结束
+定义 模型 右件
+    公开 变量 整数 宽度
+结束
+定义 模型 合体
+    嵌入 左件
+    嵌入 右件
+结束
+函数 用()
+    变量 h = 合体()
+    h.宽度 = 5
+结束
+`
+	diags := Analyze(src)
+	found := false
+	for _, d := range diags {
+		if d.Code == "embed-ambiguous" && strings.Contains(d.Message, "宽度") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("应报告同层嵌入歧义，实际：%+v", diags)
+	}
+}
+
+func TestEmbedQualifiedAccessNoDiagnostic(t *testing.T) {
+	src := `
+定义 模型 左件
+    公开 变量 整数 宽度
+结束
+定义 模型 右件
+    公开 变量 整数 宽度
+结束
+定义 模型 合体
+    嵌入 左件
+    嵌入 右件
+结束
+函数 用()
+    变量 h = 合体()
+    h.左件.宽度 = 5
+结束
+`
+	for _, d := range Analyze(src) {
+		if d.Code == "embed-ambiguous" {
+			t.Fatalf("限定访问不应报歧义：%+v", d)
+		}
+	}
+}
+
+func TestSingleEmbedNoAmbiguity(t *testing.T) {
+	src := `
+定义 模型 基础
+    公开 变量 整数 宽度
+结束
+定义 模型 派生
+    嵌入 基础
+结束
+函数 用()
+    变量 d = 派生()
+    d.宽度 = 5
+结束
+`
+	for _, d := range Analyze(src) {
+		if d.Code == "embed-ambiguous" {
+			t.Fatalf("单一嵌入不应报歧义：%+v", d)
+		}
+	}
+}

@@ -61,6 +61,7 @@ func AnalyzeIndex(index *Index) []Diagnostic {
 	diags = append(diags, checkMixfixSpacing(prog, registry)...)
 	diags = append(diags, index.root.checkImports(index)...)
 	diags = append(diags, index.root.checkUndefinedNames(index)...)
+	diags = append(diags, index.checkEmbedAmbiguity()...)
 	return diags
 }
 

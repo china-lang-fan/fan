@@ -509,6 +509,13 @@ func (idx *Index) memberCompletions(ownerExpr string) []CompletionItem {
 		for _, child := range class.Children {
 			add(CompletionItem{Label: child.Name, Kind: child.Kind, Detail: child.Detail, Doc: child.Doc})
 		}
+		idx.addEmbeddedMembers(class, add, map[string]bool{})
+	}
+	if class := idx.lookupClassAnyDoc(owner); class != nil {
+		for _, child := range class.Children {
+			add(CompletionItem{Label: child.Name, Kind: child.Kind, Detail: child.Detail, Doc: child.Doc})
+		}
+		idx.addEmbeddedMembers(class, add, map[string]bool{})
 	}
 	if iface := idx.root.interfaces[owner]; iface != nil {
 		for _, child := range iface.Children {
@@ -554,6 +561,35 @@ func isPrimitiveType(name string) bool {
 		return true
 	}
 	return false
+}
+
+// lookupClassAnyDoc 在入口文件及所有已索引模块中按名查找模型符号。
+func (idx *Index) lookupClassAnyDoc(name string) *Symbol {
+	for _, doc := range idx.allDocs() {
+		if class := doc.classes[name]; class != nil {
+			return class
+		}
+	}
+	return nil
+}
+
+// addEmbeddedMembers 把嵌入模型名及其提升字段/方法加入补全。
+func (idx *Index) addEmbeddedMembers(class *Symbol, add func(CompletionItem), seen map[string]bool) {
+	for _, embedName := range class.Embeds {
+		if seen[embedName] {
+			continue
+		}
+		seen[embedName] = true
+		add(CompletionItem{Label: embedName, Kind: KindClass, Detail: "嵌入"})
+		embed := idx.lookupClassAnyDoc(embedName)
+		if embed == nil {
+			continue
+		}
+		for _, child := range embed.Children {
+			add(CompletionItem{Label: child.Name, Kind: child.Kind, Detail: child.Detail, Doc: child.Doc})
+		}
+		idx.addEmbeddedMembers(embed, add, seen)
+	}
 }
 
 // CompletionKeywords 是补全列表中的关键字。

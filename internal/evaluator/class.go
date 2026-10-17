@@ -41,6 +41,117 @@ func (c *Class) Tags() []tagsys.Object {
 type Instance struct {
 	Class  *Class
 	Fields map[string]object.Object
+	// Embeds 按声明顺序保存被嵌入模型的子实例，可用模型名访问（d.动物）。
+	Embeds []*Instance
+}
+
+// embedByName 按嵌入模型名查找子实例。
+func (i *Instance) embedByName(name string) *Instance {
+	for _, e := range i.Embeds {
+		if e.Class != nil && e.Class.Name == name {
+			return e
+		}
+	}
+	return nil
+}
+
+// fieldResolution 描述一次字段提升查找的结果。
+type fieldResolution struct {
+	value    object.Object
+	owner    *Class
+	instance *Instance
+	// ambiguous 表示同层多个嵌入提供同名字段。
+	ambiguous bool
+	found     bool
+}
+
+// resolveField 沿嵌入链查找字段：自身字段优先；同层多个嵌入提供同名
+// 字段时返回 ambiguous；深层唯一提供时返回该字段。
+func (i *Instance) resolveField(name string) fieldResolution {
+	if v, ok := i.Fields[name]; ok {
+		return fieldResolution{value: v, owner: i.Class, instance: i, found: true}
+	}
+	var matches []fieldResolution
+	for _, e := range i.Embeds {
+		r := e.resolveField(name)
+		if r.found && !r.ambiguous {
+			matches = append(matches, r)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	if len(matches) > 1 {
+		return fieldResolution{ambiguous: true, found: true}
+	}
+	return fieldResolution{}
+}
+
+// setFieldValue 沿嵌入链写字段；同层歧义时拒绝写入。
+func (i *Instance) setFieldValue(name string, val object.Object) error {
+	if _, ok := i.Fields[name]; ok {
+		i.Fields[name] = val
+		return nil
+	}
+	var targets []*Instance
+	for _, e := range i.Embeds {
+		if r := e.resolveField(name); r.found && !r.ambiguous {
+			targets = append(targets, e)
+		}
+	}
+	if len(targets) == 1 {
+		return targets[0].setFieldValue(name, val)
+	}
+	if len(targets) > 1 {
+		return fmt.Errorf("%s 的字段 %s 在嵌入链中有歧义，需通过嵌入名限定访问", i.Class.Name, name)
+	}
+	return fmt.Errorf("%s 没有字段 %s", i.Class.Name, name)
+}
+
+// methodResolution 描述方法查找结果。
+type methodResolution struct {
+	fn        *Function
+	vis       ast.Visibility
+	owner     *Class
+	ambiguous bool
+	found     bool
+}
+
+// resolveMethod 沿嵌入链查找方法：自身方法优先；同层多个嵌入提供同名
+// 方法时歧义。
+func (c *Class) resolveMethod(name string) methodResolution {
+	if fn, ok := c.Methods[name]; ok {
+		return methodResolution{fn: fn, vis: c.MethodVis[name], owner: c, found: true}
+	}
+	var matches []methodResolution
+	for _, embed := range c.Embeds {
+		r := embed.resolveMethod(name)
+		if r.found && !r.ambiguous {
+			matches = append(matches, r)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	if len(matches) > 1 {
+		return methodResolution{ambiguous: true, found: true}
+	}
+	return methodResolution{}
+}
+
+// newZeroInstance 递归创建模型及其嵌入链的零值实例（不调用 初始化）。
+func newZeroInstance(cls *Class) *Instance {
+	inst := &Instance{
+		Class:  cls,
+		Fields: map[string]object.Object{},
+	}
+	for _, field := range cls.Fields {
+		inst.Fields[field.Name] = object.Null
+	}
+	for _, embed := range cls.Embeds {
+		inst.Embeds = append(inst.Embeds, newZeroInstance(embed))
+	}
+	return inst
 }
 
 func (i *Instance) Kind() object.Kind { return "实例" }
@@ -155,20 +266,7 @@ func (c *Class) instantiate(rt *Runtime, pos ast.Position, args []object.Object)
 		}
 		return inst, nil
 	}
-	inst := &Instance{
-		Class:  c,
-		Fields: map[string]object.Object{},
-	}
-	for _, field := range c.Fields {
-		inst.Fields[field.Name] = object.Null
-	}
-	for _, embed := range c.Embeds {
-		for _, field := range embed.Fields {
-			if _, exists := inst.Fields[field.Name]; !exists {
-				inst.Fields[field.Name] = object.Null
-			}
-		}
-	}
+	inst := newZeroInstance(c)
 	initFn := c.lookupMethod("初始化")
 	if initFn == nil {
 		if len(args) != 0 {
@@ -197,75 +295,18 @@ func errorStackToArray(frames []object.StackFrame) *object.Array {
 }
 
 func (c *Class) lookupMethod(name string) *Function {
-	if fn, ok := c.Methods[name]; ok {
-		return fn
-	}
-	var found []*Function
-	for _, embed := range c.Embeds {
-		if fn := embed.lookupMethod(name); fn != nil {
-			found = append(found, fn)
-		}
-	}
-	if len(found) == 1 {
-		return found[0]
-	}
-	if len(found) > 1 {
+	r := c.resolveMethod(name)
+	if r.ambiguous {
 		return nil
 	}
-	return nil
+	return r.fn
 }
 
-// fieldVisibility 返回字段的可见性及其定义所在模型（沿嵌入链）。
-func (c *Class) fieldVisibility(name string) (ast.Visibility, *Class, bool) {
-	for _, f := range c.Fields {
-		if f.Name == name {
-			return f.Visibility, c, true
-		}
-	}
-	var found []struct {
-		vis ast.Visibility
-		cls *Class
-	}
-	for _, embed := range c.Embeds {
-		if vis, owner, ok := embed.fieldVisibility(name); ok {
-			found = append(found, struct {
-				vis ast.Visibility
-				cls *Class
-			}{vis, owner})
-		}
-	}
-	if len(found) == 1 {
-		return found[0].vis, found[0].cls, true
-	}
-	return ast.VisFile, nil, false
-}
-
-// methodVisibility 返回方法的可见性及其定义所在模型。
-func (c *Class) methodVisibility(name string) (ast.Visibility, *Class, bool) {
-	if vis, ok := c.MethodVis[name]; ok {
-		return vis, c, true
-	}
-	var found []struct {
-		vis ast.Visibility
-		cls *Class
-	}
-	for _, embed := range c.Embeds {
-		if vis, owner, ok := embed.methodVisibility(name); ok {
-			found = append(found, struct {
-				vis ast.Visibility
-				cls *Class
-			}{vis, owner})
-		}
-	}
-	if len(found) == 1 {
-		return found[0].vis, found[0].cls, true
-	}
-	return ast.VisFile, nil, false
-}
-
-// accessibleFrom 判断某模型上、可见性为 vis 的成员能否从调用环境 env 访问。
-// private 成员仅本模型自己的方法可访问；file 成员需同文件；public 任意可访问。
-func memberAccessible(vis ast.Visibility, definingClass *Class, env *Environment) bool {
+// accessibleFrom 判断成员能否从调用环境访问。
+// private 成员仅本模型自己的方法可访问（嵌入后也不放开）；
+// public 任意可访问；file（默认）需同文件，但经嵌入链提升访问时放开。
+// viaEmbed 表示本次访问来自外层模型对嵌入成员的提升访问。
+func memberAccessible(vis ast.Visibility, definingClass *Class, env *Environment, viaEmbed bool) bool {
 	switch vis {
 	case ast.VisPublic:
 		return true
@@ -275,6 +316,9 @@ func memberAccessible(vis ast.Visibility, definingClass *Class, env *Environment
 		}
 		return false
 	default:
+		if viaEmbed {
+			return true
+		}
 		if definingClass == nil {
 			return true
 		}
@@ -295,30 +339,53 @@ func currentFunction(env *Environment) *Function {
 	return nil
 }
 
-func (i *Instance) getField(name string) (object.Object, bool) {
-	v, ok := i.Fields[name]
-	return v, ok
-}
-
-func (i *Instance) setField(name string, val object.Object) error {
-	if _, exists := i.Fields[name]; !exists {
-		return fmt.Errorf("%s 没有字段 %s", i.Class.Name, name)
+// ownerFieldVis 返回字段在定义模型上的可见性。
+func ownerFieldVis(cls *Class, name string) ast.Visibility {
+	if cls == nil {
+		return ast.VisFile
 	}
-	i.Fields[name] = val
-	return nil
+	for _, f := range cls.Fields {
+		if f.Name == name {
+			return f.Visibility
+		}
+	}
+	return ast.VisFile
 }
 
 func (i *Instance) getMethod(name string, env *Environment) (*Function, error) {
-	fn := i.Class.lookupMethod(name)
-	if fn == nil {
+	mr := i.Class.resolveMethod(name)
+	if !mr.found {
 		return nil, fmt.Errorf("%s 没有方法 %s", i.Class.Name, name)
 	}
+	if mr.ambiguous {
+		return nil, fmt.Errorf("%s 的方法 %s 在嵌入链中有歧义，需通过嵌入名限定", i.Class.Name, name)
+	}
 	if env != nil {
-		if vis, owner, _ := i.Class.methodVisibility(name); !memberAccessible(vis, owner, env) {
-			return nil, fmt.Errorf("%s 的私有方法 %s 不可在模型外访问", i.Class.Name, name)
+		if !memberAccessible(mr.vis, mr.owner, env, mr.owner != i.Class) {
+			return nil, fmt.Errorf("%s 的私有方法 %s 不可在模型外访问", mr.owner.Name, name)
 		}
 	}
-	return fn.bind(i), nil
+	// 提升自嵌入的方法绑定到子实例。
+	receiver := i
+	if mr.owner != i.Class {
+		if r := i.resolveFieldOwner(mr.owner); r != nil {
+			receiver = r
+		}
+	}
+	return mr.fn.bind(receiver), nil
+}
+
+// resolveFieldOwner 在嵌入链中找到属于指定模型的子实例。
+func (i *Instance) resolveFieldOwner(cls *Class) *Instance {
+	if i.Class == cls {
+		return i
+	}
+	for _, e := range i.Embeds {
+		if r := e.resolveFieldOwner(cls); r != nil {
+			return r
+		}
+	}
+	return nil
 }
 
 func (f *Function) bind(inst *Instance) *Function {
@@ -347,17 +414,35 @@ func evalFieldAccess(node *ast.MemberExpr, env *Environment, obj object.Object) 
 		}
 		return v, nil
 	case *Instance:
-		if v, ok := target.getField(node.Name); ok {
-			if vis, owner, _ := target.Class.fieldVisibility(node.Name); !memberAccessible(vis, owner, env) {
-				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", target.Class.Name, node.Name)}
-			}
-			return v, nil
+		// 嵌入子实例可通过嵌入模型名访问：d.动物
+		if embed := target.embedByName(node.Name); embed != nil {
+			return embed, nil
 		}
-		if fn := target.Class.lookupMethod(node.Name); fn != nil {
-			if vis, owner, _ := target.Class.methodVisibility(node.Name); !memberAccessible(vis, owner, env) {
-				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有方法 %s 不可在模型外访问", target.Class.Name, node.Name)}
+		// 字段（含嵌入提升）
+		if r := target.resolveField(node.Name); r.found {
+			if r.ambiguous {
+				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的字段 %s 在嵌入链中有歧义，请用 嵌入名.%s 限定", target.Class.Name, node.Name, node.Name)}
 			}
-			return fn.bind(target), nil
+			if !memberAccessible(ownerFieldVis(r.owner, node.Name), r.owner, env, r.owner != target.Class) {
+				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", r.owner.Name, node.Name)}
+			}
+			return r.value, nil
+		}
+		// 方法（含嵌入提升）
+		if mr := target.Class.resolveMethod(node.Name); mr.found {
+			if mr.ambiguous {
+				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的方法 %s 在嵌入链中有歧义，请用 嵌入名.%s 限定", target.Class.Name, node.Name, node.Name)}
+			}
+			if !memberAccessible(mr.vis, mr.owner, env, mr.owner != target.Class) {
+				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有方法 %s 不可在模型外访问", mr.owner.Name, node.Name)}
+			}
+			receiver := target
+			if mr.owner != target.Class {
+				if r := target.resolveFieldOwner(mr.owner); r != nil {
+					receiver = r
+				}
+			}
+			return mr.fn.bind(receiver), nil
 		}
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有字段或方法 %s", target.Class.Name, node.Name)}
 	case *object.Array:

@@ -91,9 +91,16 @@ type fieldTarget struct {
 }
 
 func (t *fieldTarget) checkFieldAccess(inst *Instance) error {
-	vis, owner, ok := inst.Class.fieldVisibility(t.name)
-	if ok && !memberAccessible(vis, owner, t.env) {
-		return &EvalError{Pos: t.pos, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", inst.Class.Name, t.name)}
+	r := inst.resolveField(t.name)
+	if !r.found {
+		return nil
+	}
+	if r.ambiguous {
+		return &EvalError{Pos: t.pos, Reason: fmt.Sprintf("%s 的字段 %s 在嵌入链中有歧义，需通过嵌入名限定访问", inst.Class.Name, t.name)}
+	}
+	vis := ownerFieldVis(r.owner, t.name)
+	if !memberAccessible(vis, r.owner, t.env, r.owner != inst.Class) {
+		return &EvalError{Pos: t.pos, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", r.owner.Name, t.name)}
 	}
 	return nil
 }
@@ -101,11 +108,11 @@ func (t *fieldTarget) checkFieldAccess(inst *Instance) error {
 func (t *fieldTarget) get() (object.Object, error) {
 	switch target := t.target.(type) {
 	case *Instance:
-		if val, ok := target.getField(t.name); ok {
+		if r := target.resolveField(t.name); r.found {
 			if err := t.checkFieldAccess(target); err != nil {
 				return nil, err
 			}
-			return val, nil
+			return r.value, nil
 		}
 		return nil, &EvalError{Pos: t.pos, Reason: fmt.Sprintf("%s 没有字段 %s", target.Class.Name, t.name)}
 	}
@@ -118,7 +125,7 @@ func (t *fieldTarget) set(val object.Object) error {
 		if err := t.checkFieldAccess(target); err != nil {
 			return err
 		}
-		if err := target.setField(t.name, val); err != nil {
+		if err := target.setFieldValue(t.name, val); err != nil {
 			return &EvalError{Pos: t.pos, Reason: err.Error()}
 		}
 		return nil
