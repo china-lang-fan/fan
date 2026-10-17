@@ -103,6 +103,13 @@ func (r *Runtime) registerInterface(iface *Interface, env *Environment) error {
 					if conflict.Arity != method.Arity {
 						return fmt.Errorf("接口 %s 中方法 %s 的签名冲突", iface.Name, name)
 					}
+					if reason := signatureMismatch(conflict, methodInfo{
+						arity:       method.Arity,
+						params:      method.Params,
+						returnTypes: method.ReturnTypes,
+					}, env); reason != "" {
+						return fmt.Errorf("接口 %s 中方法 %s 的签名冲突（%s）", iface.Name, name, reason)
+					}
 					continue
 				}
 				iface.Methods[name] = method
@@ -133,12 +140,37 @@ func (r *Runtime) lookupInterface(name string, env *Environment) (*Interface, bo
 	return nil, false
 }
 
-// checkInterfaceSatisfied 判断值是否实现了接口的全部方法。
-// 返回不满足时的方法名；ambiguous 为 true 表示该方法在嵌入链中有歧义。
+type methodInfo struct {
+	arity       int
+	params      []ast.Parameter
+	returnTypes []ast.DeclType
+	ambiguous   bool
+}
+
+func methodInfoOf(fn *Function) methodInfo {
+	params := fn.Params
+	if len(params) > 0 && params[0].Name == "自己" {
+		params = params[1:]
+	}
+	return methodInfo{
+		arity:       len(params),
+		params:      append([]ast.Parameter(nil), params...),
+		returnTypes: append([]ast.DeclType(nil), fn.ReturnTypes...),
+	}
+}
+
+// ifaceMismatch 描述接口方法与实际方法签名的不匹配原因。
+type ifaceMismatch struct {
+	method    string
+	reason    string
+	ambiguous bool
+}
+
+// checkInterfaceSatisfied 判断值是否实现了接口的全部方法（含参数与返回类型）。
 // 空 值视为可赋给接口（与 Go 的 nil 接口一致）。
-func checkInterfaceSatisfied(iface *Interface, value object.Object, env *Environment) (missing string, ambiguous bool, ok bool) {
+func checkInterfaceSatisfied(iface *Interface, value object.Object, env *Environment) *ifaceMismatch {
 	if value == nil || value.Kind() == object.KindNil {
-		return "", false, true
+		return nil
 	}
 	var methods map[string]methodInfo
 	switch v := value.(type) {
@@ -153,30 +185,98 @@ func checkInterfaceSatisfied(iface *Interface, value object.Object, env *Environ
 		want := iface.Methods[name]
 		got, exists := methods[name]
 		if !exists {
-			return name, false, false
+			return &ifaceMismatch{method: name, reason: "缺少"}
 		}
 		if got.ambiguous {
-			return name, true, false
+			return &ifaceMismatch{method: name, ambiguous: true}
 		}
-		if got.arity != want.Arity {
-			return name, false, false
+		if reason := signatureMismatch(want, got, env); reason != "" {
+			return &ifaceMismatch{method: name, reason: reason}
 		}
 	}
-	return "", false, true
+	return nil
 }
 
-type methodInfo struct {
-	arity     int
-	ambiguous bool
-}
-
-// methodArity 计算模型方法对调用方可见的参数数量，显式 自己 接收者不计入。
-func methodArity(fn *Function) int {
-	arity := len(fn.Params)
-	if arity > 0 && fn.Params[0].Name == "自己" {
-		arity--
+// signatureMismatch 比较接口方法签名与实现方法签名；匹配返回空串。
+// 接口中未标注的类型（TypeAny）表示不约束；实现方法未标注类型同样跳过该项检查。
+func signatureMismatch(want *InterfaceMethod, got methodInfo, env *Environment) string {
+	wantParams := want.Params
+	gotParams := got.params
+	// 实现方法完全未标注类型（参数与返回均为 Any）时，跳过签名细查（鸭子类型）。
+	implFullyUntyped := true
+	for _, gp := range gotParams {
+		if gp.Type != ast.TypeAny {
+			implFullyUntyped = false
+			break
+		}
 	}
-	return arity
+	for _, rt := range got.returnTypes {
+		if rt != ast.TypeAny {
+			implFullyUntyped = false
+		}
+	}
+	if implFullyUntyped {
+		if len(gotParams) > 0 && gotParams[len(gotParams)-1].Variadic {
+			fixed := len(gotParams) - 1
+			if len(wantParams) < fixed {
+				return fmt.Sprintf("参数数量不符：需要 %d 个，实际 %d 个", len(wantParams), got.arity)
+			}
+		} else if len(wantParams) != len(gotParams) {
+			return fmt.Sprintf("参数数量不符：需要 %d 个，实际 %d 个", len(wantParams), got.arity)
+		}
+		return ""
+	}
+	// 可变参数：实现方法最后一个参数可变时，允许接口参数数量不小于固定参数数。
+	if len(gotParams) > 0 && gotParams[len(gotParams)-1].Variadic {
+		fixed := len(gotParams) - 1
+		if len(wantParams) < fixed {
+			return fmt.Sprintf("参数数量不符：需要 %d 个，实际 %d 个", len(wantParams), got.arity)
+		}
+	} else if len(wantParams) != len(gotParams) {
+		return fmt.Sprintf("参数数量不符：需要 %d 个，实际 %d 个", len(wantParams), got.arity)
+	}
+	for i, wp := range wantParams {
+		if wp.Type == ast.TypeAny {
+			continue
+		}
+		var gp ast.Parameter
+		if i < len(gotParams) {
+			gp = gotParams[i]
+		} else if len(gotParams) > 0 && gotParams[len(gotParams)-1].Variadic {
+			gp = gotParams[len(gotParams)-1]
+		}
+		if gp.Type == ast.TypeAny {
+			continue
+		}
+		if !signatureTypeCompatible(wp.Type, gp.Type) {
+			return fmt.Sprintf("参数 %s 类型不符：需要 %s，实际 %s", wp.Name, wp.Type, gp.Type)
+		}
+	}
+	if len(want.ReturnTypes) == 0 {
+		return ""
+	}
+	if len(want.ReturnTypes) != len(got.returnTypes) {
+		return fmt.Sprintf("返回值数量不符：需要 %d 个，实际 %d 个", len(want.ReturnTypes), len(got.returnTypes))
+	}
+	for i, wantType := range want.ReturnTypes {
+		if wantType == ast.TypeAny {
+			continue
+		}
+		gotType := got.returnTypes[i]
+		if gotType == ast.TypeAny {
+			continue
+		}
+		if !signatureTypeCompatible(wantType, gotType) {
+			return fmt.Sprintf("返回值类型不符：需要 %s，实际 %s", wantType, gotType)
+		}
+	}
+	return ""
+}
+
+// signatureTypeCompatible 比较接口签名与实现签名中的类型名是否一致。
+// 凡语言采用 Go 的名义匹配：方法签名类型必须同名，不做协变/逆变。
+func signatureTypeCompatible(want ast.DeclType, got ast.DeclType) bool {
+	return want == got
 }
 
 // valueIsType 判断值是否属于/兼容给定类型名。支持：
@@ -199,8 +299,7 @@ func valueIsType(value object.Object, typeName string, env *Environment) bool {
 		}
 		// 空 可赋给任何接口；名义模型/命名类型不匹配。
 		if iface, ok := env.Runtime().lookupInterface(typeName, env); ok {
-			_, _, satisfied := checkInterfaceSatisfied(iface, value, env)
-			return satisfied
+			return checkInterfaceSatisfied(iface, value, env) == nil
 		}
 		return false
 	}
@@ -222,8 +321,7 @@ func valueIsType(value object.Object, typeName string, env *Environment) bool {
 		}
 	}
 	if iface, ok := env.Runtime().lookupInterface(typeName, env); ok {
-		_, _, satisfied := checkInterfaceSatisfied(iface, value, env)
-		return satisfied
+		return checkInterfaceSatisfied(iface, value, env) == nil
 	}
 	return false
 }
@@ -398,7 +496,7 @@ func classMethodSet(cls *Class, seen map[string]bool) map[string]methodInfo {
 	}
 	seen[cls.Name] = true
 	for name, fn := range cls.Methods {
-		out[name] = methodInfo{arity: methodArity(fn)}
+		out[name] = methodInfoOf(fn)
 	}
 	embedSets := make([]map[string]methodInfo, 0, len(cls.Embeds))
 	for _, embed := range cls.Embeds {
@@ -447,11 +545,8 @@ func namedMethodSet(value *object.Named, env *Environment) map[string]methodInfo
 		return out
 	}
 	for name, fn := range namedType.Methods {
-		arity := len(fn.Params)
-		if arity > 0 {
-			arity-- // 接收者
-		}
-		out[name] = methodInfo{arity: arity}
+		info := methodInfoOf(fn)
+		out[name] = info
 	}
 	return out
 }
@@ -463,11 +558,8 @@ func primitiveMethodSet(value object.Object, env *Environment) map[string]method
 	kind := runtimeTypeName(value)
 	fns := registry.methods[kind]
 	for name, fn := range fns {
-		arity := len(fn.Params)
-		if arity > 0 {
-			arity-- // 去掉接收者参数
-		}
-		out[name] = methodInfo{arity: arity}
+		info := methodInfoOf(fn)
+		out[name] = info
 	}
 	return out
 }

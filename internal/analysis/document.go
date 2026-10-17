@@ -152,7 +152,7 @@ func (d *Document) add(sym *Symbol) {
 	d.byName[sym.Name] = append(d.byName[sym.Name], sym)
 }
 
-func unwrapExport(stmt ast.Statement) (ast.Statement, bool) {
+func unwrapVisibility(stmt ast.Statement) (ast.Statement, bool) {
 	if export, ok := stmt.(*ast.VisibilityStmt); ok {
 		return export.Inner, true
 	}
@@ -160,7 +160,7 @@ func unwrapExport(stmt ast.Statement) (ast.Statement, bool) {
 }
 
 func (d *Document) collectStatement(stmt ast.Statement, owner string) {
-	inner, _ := unwrapExport(stmt)
+	inner, _ := unwrapVisibility(stmt)
 	switch s := inner.(type) {
 	case *ast.VarDecl:
 		if fn, ok := s.Value.(*ast.FunctionLiteral); ok {

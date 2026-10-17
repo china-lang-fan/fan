@@ -67,7 +67,7 @@ func (d *Document) checkUndefinedNames(idx *Index) []Diagnostic {
 
 	// 顶层语句各自模拟一次作用域。
 	for _, stmt := range d.Prog.Statements {
-		inner, _ := unwrapExport(stmt)
+		inner, _ := unwrapVisibility(stmt)
 		if fnVar, ok := inner.(*ast.VarDecl); ok {
 			if fn, ok := fnVar.Value.(*ast.FunctionLiteral); ok {
 				diags = append(diags, checkFunctionBody(d, fn, defined)...)
@@ -85,7 +85,7 @@ func (d *Document) checkUndefinedNames(idx *Index) []Diagnostic {
 func (d *Document) checkTopLevelExpressions(globals map[string]bool) []Diagnostic {
 	var diags []Diagnostic
 	for _, stmt := range d.Prog.Statements {
-		inner, _ := unwrapExport(stmt)
+		inner, _ := unwrapVisibility(stmt)
 		switch s := inner.(type) {
 		case *ast.VarDecl:
 			if _, isFn := s.Value.(*ast.FunctionLiteral); isFn {

@@ -240,13 +240,16 @@ func checkDeclType(dt ast.DeclType, val object.Object, env *Environment) error {
 			if _, isNamed := rt.namedTypes[string(dt)]; isNamed {
 				return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（需显式转换）", dt, val.Kind())
 			}
-			// 声明的类型名可能是接口：按方法集做结构化满足检查。
+			// 声明的类型名可能是接口：按方法集做结构化满足检查（含签名）。
 			if iface, ok := rt.lookupInterface(string(dt), env); ok {
-				if name, ambiguous, satisfied := checkInterfaceSatisfied(iface, val, env); !satisfied {
-					if ambiguous {
-						return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（方法 %s 在嵌入链中有歧义）", dt, val.Kind(), name)
+				if mismatch := checkInterfaceSatisfied(iface, val, env); mismatch != nil {
+					if mismatch.ambiguous {
+						return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（方法 %s 在嵌入链中有歧义）", dt, val.Kind(), mismatch.method)
 					}
-					return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（缺少方法 %s）", dt, val.Kind(), name)
+					if mismatch.reason == "缺少" {
+						return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（缺少方法 %s）", dt, val.Kind(), mismatch.method)
+					}
+					return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（方法 %s %s）", dt, val.Kind(), mismatch.method, mismatch.reason)
 				}
 				return nil
 			}
