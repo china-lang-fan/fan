@@ -73,8 +73,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return evalMemberExpression(n, env)
 	case *ast.ImportStmt:
 		return evalImportStmt(n, env)
-	case *ast.ExportStmt:
-		return evalExportStmt(n, env)
+	case *ast.VisibilityStmt:
+		return evalVisibilityStmt(n, env)
 	case *ast.ClassStmt:
 		return evalClassStmt(n, env)
 	case *ast.InterfaceStmt:
@@ -873,7 +873,7 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 	}
 	switch target := obj.(type) {
 	case *Instance:
-		fn, err := target.getMethod(member.Name)
+		fn, err := target.getMethod(member.Name, env)
 		if err != nil {
 			return nil, &EvalError{Pos: node.Position, Reason: err.Error()}
 		}
@@ -892,7 +892,7 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 	case *object.Module:
 		callee, ok := target.Exports[member.Name]
 		if !ok {
-			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("模块 %s 没有导出 %s", target.Name, member.Name)}
+			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("模块 %s 没有公开成员 %s", target.Name, member.Name)}
 		}
 		return callExported(env.Runtime(), callee, args, node.Position)
 	default:
@@ -942,6 +942,9 @@ func evalFieldAssign(node *ast.FieldAssignExpr, env *Environment) (object.Object
 	inst, ok := obj.(*Instance)
 	if !ok {
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 不支持字段赋值", obj.Kind())}
+	}
+	if vis, owner, _ := inst.Class.fieldVisibility(node.Name); !memberAccessible(vis, owner, env) {
+		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", inst.Class.Name, node.Name)}
 	}
 	if err := inst.setField(node.Name, val); err != nil {
 		return nil, &EvalError{Pos: node.Position, Reason: err.Error()}

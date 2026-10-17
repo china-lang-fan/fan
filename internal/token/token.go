@@ -99,7 +99,8 @@ const (
 	FUNCTION  Type = "FUNCTION"
 	RETURN    Type = "RETURN"
 	IMPORT    Type = "IMPORT"
-	EXPORT    Type = "EXPORT"
+	PUBLIC    Type = "PUBLIC"
+	PRIVATE   Type = "PRIVATE"
 	DEFER     Type = "DEFER"
 	THROW     Type = "THROW"
 	CHECK     Type = "CHECK"
@@ -184,7 +185,8 @@ var keywords = map[string]Type{
 	"函数":   FUNCTION,
 	"返回":   RETURN,
 	"导入":   IMPORT,
-	"导出":   EXPORT,
+	"公开":   PUBLIC,
+	"私有":   PRIVATE,
 	"稍后":   DEFER,
 	"抛出":   THROW,
 	"检查":   CHECK,

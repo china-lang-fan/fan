@@ -165,7 +165,7 @@ func testFromStatement(stmt ast.Statement, env *evaluator.Environment) (string, 
 		}
 		fn, err := functionFromEnv(s.Name, s.Position, env)
 		return s.Name, s.Position, fn, true, err
-	case *ast.ExportStmt:
+	case *ast.VisibilityStmt:
 		return testFromStatement(s.Inner, env)
 	}
 	return "", ast.Position{}, nil, false, nil

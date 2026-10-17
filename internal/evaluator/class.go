@@ -14,10 +14,13 @@ type Class struct {
 	Name         string
 	Fields       []ast.FieldDecl
 	Methods      map[string]*Function
+	MethodVis    map[string]ast.Visibility
 	Embeds       []*Class
 	Parent       *Environment
 	TagInstances []object.Object
 	Impl         tagsys.Callable
+	// SourceFile 是模型定义所在文件的绝对路径，用于文件私有可见性判断。
+	SourceFile string
 }
 
 func (c *Class) Kind() object.Kind { return KindClass }
@@ -47,10 +50,13 @@ func (i *Instance) Inspect() string {
 
 func evalClassStmt(stmt *ast.ClassStmt, env *Environment) (object.Object, error) {
 	cls := &Class{
-		Name:    stmt.Name,
-		Fields:  append([]ast.FieldDecl(nil), stmt.Fields...),
-		Methods: map[string]*Function{},
-		Parent:  env,
+		Name:       stmt.Name,
+		Fields:     append([]ast.FieldDecl(nil), stmt.Fields...),
+		Methods:    map[string]*Function{},
+		MethodVis:  map[string]ast.Visibility{},
+		Embeds:     nil,
+		Parent:     env,
+		SourceFile: env.SourceFile,
 	}
 	for _, embedName := range stmt.Embeds {
 		val, ok := env.get(embedName)
@@ -123,6 +129,7 @@ func evalClassMethodDef(stmt *ast.MethodDef, env *Environment, cls *Class) (obje
 		return nil, err
 	}
 	cls.Methods[stmt.MethodName] = fn
+	cls.MethodVis[stmt.MethodName] = stmt.Visibility
 	return object.Null, nil
 }
 
@@ -208,6 +215,86 @@ func (c *Class) lookupMethod(name string) *Function {
 	return nil
 }
 
+// fieldVisibility 返回字段的可见性及其定义所在模型（沿嵌入链）。
+func (c *Class) fieldVisibility(name string) (ast.Visibility, *Class, bool) {
+	for _, f := range c.Fields {
+		if f.Name == name {
+			return f.Visibility, c, true
+		}
+	}
+	var found []struct {
+		vis ast.Visibility
+		cls *Class
+	}
+	for _, embed := range c.Embeds {
+		if vis, owner, ok := embed.fieldVisibility(name); ok {
+			found = append(found, struct {
+				vis ast.Visibility
+				cls *Class
+			}{vis, owner})
+		}
+	}
+	if len(found) == 1 {
+		return found[0].vis, found[0].cls, true
+	}
+	return ast.VisFile, nil, false
+}
+
+// methodVisibility 返回方法的可见性及其定义所在模型。
+func (c *Class) methodVisibility(name string) (ast.Visibility, *Class, bool) {
+	if vis, ok := c.MethodVis[name]; ok {
+		return vis, c, true
+	}
+	var found []struct {
+		vis ast.Visibility
+		cls *Class
+	}
+	for _, embed := range c.Embeds {
+		if vis, owner, ok := embed.methodVisibility(name); ok {
+			found = append(found, struct {
+				vis ast.Visibility
+				cls *Class
+			}{vis, owner})
+		}
+	}
+	if len(found) == 1 {
+		return found[0].vis, found[0].cls, true
+	}
+	return ast.VisFile, nil, false
+}
+
+// accessibleFrom 判断某模型上、可见性为 vis 的成员能否从调用环境 env 访问。
+// private 成员仅本模型自己的方法可访问；file 成员需同文件；public 任意可访问。
+func memberAccessible(vis ast.Visibility, definingClass *Class, env *Environment) bool {
+	switch vis {
+	case ast.VisPublic:
+		return true
+	case ast.VisPrivate:
+		if fn := currentFunction(env); fn != nil && fn.Owner == definingClass {
+			return true
+		}
+		return false
+	default:
+		if definingClass == nil {
+			return true
+		}
+		return definingClass.SourceFile == "" || env.SourceFile == "" || definingClass.SourceFile == env.SourceFile
+	}
+}
+
+func currentFunction(env *Environment) *Function {
+	if env == nil {
+		return nil
+	}
+	if env.currentFn != nil {
+		return env.currentFn
+	}
+	if env.outer != nil {
+		return currentFunction(env.outer)
+	}
+	return nil
+}
+
 func (i *Instance) getField(name string) (object.Object, bool) {
 	v, ok := i.Fields[name]
 	return v, ok
@@ -221,10 +308,15 @@ func (i *Instance) setField(name string, val object.Object) error {
 	return nil
 }
 
-func (i *Instance) getMethod(name string) (*Function, error) {
+func (i *Instance) getMethod(name string, env *Environment) (*Function, error) {
 	fn := i.Class.lookupMethod(name)
 	if fn == nil {
 		return nil, fmt.Errorf("%s 没有方法 %s", i.Class.Name, name)
+	}
+	if env != nil {
+		if vis, owner, _ := i.Class.methodVisibility(name); !memberAccessible(vis, owner, env) {
+			return nil, fmt.Errorf("%s 的私有方法 %s 不可在模型外访问", i.Class.Name, name)
+		}
 	}
 	return fn.bind(i), nil
 }
@@ -251,14 +343,20 @@ func evalFieldAccess(node *ast.MemberExpr, env *Environment, obj object.Object) 
 	case *object.Module:
 		v, ok := target.Exports[node.Name]
 		if !ok {
-			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("模块 %s 没有导出 %s", target.Name, node.Name)}
+			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("模块 %s 没有公开成员 %s", target.Name, node.Name)}
 		}
 		return v, nil
 	case *Instance:
 		if v, ok := target.getField(node.Name); ok {
+			if vis, owner, _ := target.Class.fieldVisibility(node.Name); !memberAccessible(vis, owner, env) {
+				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", target.Class.Name, node.Name)}
+			}
 			return v, nil
 		}
 		if fn := target.Class.lookupMethod(node.Name); fn != nil {
+			if vis, owner, _ := target.Class.methodVisibility(node.Name); !memberAccessible(vis, owner, env) {
+				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 的私有方法 %s 不可在模型外访问", target.Class.Name, node.Name)}
+			}
 			return fn.bind(target), nil
 		}
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有字段或方法 %s", target.Class.Name, node.Name)}

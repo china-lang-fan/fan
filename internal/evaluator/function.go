@@ -218,6 +218,7 @@ func functionDisplayName(fn *Function) string {
 
 func applyFunctionBodyWithFrame(rt *Runtime, fn *Function, values []object.Object, pos ast.Position, frame *callFrame) (object.Object, error) {
 	env := NewEnclosedEnvironment(fn.Env)
+	env.currentFn = fn
 	for i, param := range fn.Params {
 		if param.Variadic {
 			if err := env.declare(param.Name, values[i], false, ast.TypeArray); err != nil {

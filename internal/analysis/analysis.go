@@ -103,7 +103,7 @@ func functionLiteralOf(stmt ast.Statement) *ast.FunctionLiteral {
 		if fn, ok := s.Value.(*ast.FunctionLiteral); ok {
 			return fn
 		}
-	case *ast.ExportStmt:
+	case *ast.VisibilityStmt:
 		return functionLiteralOf(s.Inner)
 	}
 	return nil
@@ -312,7 +312,7 @@ func childrenOf(node ast.Node) []ast.Node {
 	case *ast.CompoundAssignStmt:
 		addExpr(n.Target)
 		addExpr(n.Value)
-	case *ast.ExportStmt:
+	case *ast.VisibilityStmt:
 		addStmt(n.Inner)
 	case *ast.ExpressionStmt:
 		addExpr(n.Expression)

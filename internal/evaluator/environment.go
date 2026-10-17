@@ -8,10 +8,10 @@ import (
 )
 
 type binding struct {
-	value    object.Object
-	isConst  bool
-	isExport bool
-	declType ast.DeclType
+	value      object.Object
+	isConst    bool
+	visibility ast.Visibility
+	declType   ast.DeclType
 }
 
 type Environment struct {
@@ -19,10 +19,12 @@ type Environment struct {
 	outer             *Environment
 	rt                *Runtime
 	BaseDir           string
+	SourceFile        string
 	Loader            *Loader
 	moduleExport      bool
 	primitiveRegistry *primitiveMethodRegistry
 	mixfixRegistry    *mixfixFunctionRegistry
+	currentFn         *Function
 }
 
 // NewEnvironment 创建一个绑定到新运行实例的根环境。
@@ -87,6 +89,7 @@ func NewEnclosedEnvironment(outer *Environment) *Environment {
 		outer:        outer,
 		rt:           outer.Runtime(),
 		BaseDir:      outer.BaseDir,
+		SourceFile:   outer.SourceFile,
 		Loader:       outer.Loader,
 		moduleExport: outer.moduleExport,
 		mixfixRegistry: func() *mixfixFunctionRegistry {

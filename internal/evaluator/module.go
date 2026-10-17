@@ -157,6 +157,7 @@ func (l *Loader) Load(importerBase string, path string) (*object.Module, error) 
 	env.primitiveRegistry = registry
 	env.mixfixRegistry = mixfixRegistry
 	env.BaseDir = base
+	env.SourceFile = full
 	env.Loader = l
 	env.moduleExport = true
 
@@ -166,7 +167,7 @@ func (l *Loader) Load(importerBase string, path string) (*object.Module, error) 
 
 	mod := object.NewModule(moduleNameFromPath(full))
 	for name, b := range env.store {
-		if b.isExport {
+		if b.visibility == ast.VisPublic {
 			mod.Exports[name] = b.value
 		}
 	}
@@ -199,13 +200,13 @@ func evalImportStmt(stmt *ast.ImportStmt, env *Environment) (object.Object, erro
 	return mod, nil
 }
 
-func evalExportStmt(stmt *ast.ExportStmt, env *Environment) (object.Object, error) {
+func evalVisibilityStmt(stmt *ast.VisibilityStmt, env *Environment) (object.Object, error) {
 	res, err := Eval(stmt.Inner, env)
 	if err != nil {
 		return nil, err
 	}
 	if b, ok := env.find(stmt.Name); ok {
-		b.isExport = true
+		b.visibility = stmt.Visibility
 	}
 	return res, nil
 }

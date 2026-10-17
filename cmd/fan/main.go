@@ -80,6 +80,7 @@ func runFile(path string, scriptArgs []string) error {
 	rt.SetProcessContext(path, scriptArgs)
 	env := evaluator.NewEnvironmentForRuntime(rt)
 	env.BaseDir = dir
+	env.SourceFile = absPath(path)
 	env.SetLoader(evaluator.NewLoaderForRuntime(rt, dir))
 	if _, err := evaluator.Eval(prog, env); err != nil {
 		return err

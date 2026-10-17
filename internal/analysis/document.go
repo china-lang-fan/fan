@@ -153,7 +153,7 @@ func (d *Document) add(sym *Symbol) {
 }
 
 func unwrapExport(stmt ast.Statement) (ast.Statement, bool) {
-	if export, ok := stmt.(*ast.ExportStmt); ok {
+	if export, ok := stmt.(*ast.VisibilityStmt); ok {
 		return export.Inner, true
 	}
 	return stmt, false

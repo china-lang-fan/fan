@@ -147,9 +147,12 @@ func resolveMemberFunction(value object.Object, member *ast.MemberExpr, env *Env
 	switch target := value.(type) {
 	case *Instance:
 		if field, ok := target.getField(member.Name); ok {
+			if vis, owner, _ := target.Class.fieldVisibility(member.Name); !memberAccessible(vis, owner, env) {
+				return nil, fmt.Errorf("%s 的私有字段 %s 不可在模型外访问", target.Class.Name, member.Name)
+			}
 			return field, nil
 		}
-		if fn, err := target.getMethod(member.Name); err == nil {
+		if fn, err := target.getMethod(member.Name, env); err == nil {
 			return fn, nil
 		}
 	case *object.Module:

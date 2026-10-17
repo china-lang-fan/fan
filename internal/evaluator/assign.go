@@ -87,12 +87,24 @@ type fieldTarget struct {
 	target object.Object
 	name   string
 	pos    ast.Position
+	env    *Environment
+}
+
+func (t *fieldTarget) checkFieldAccess(inst *Instance) error {
+	vis, owner, ok := inst.Class.fieldVisibility(t.name)
+	if ok && !memberAccessible(vis, owner, t.env) {
+		return &EvalError{Pos: t.pos, Reason: fmt.Sprintf("%s 的私有字段 %s 不可在模型外访问", inst.Class.Name, t.name)}
+	}
+	return nil
 }
 
 func (t *fieldTarget) get() (object.Object, error) {
 	switch target := t.target.(type) {
 	case *Instance:
 		if val, ok := target.getField(t.name); ok {
+			if err := t.checkFieldAccess(target); err != nil {
+				return nil, err
+			}
 			return val, nil
 		}
 		return nil, &EvalError{Pos: t.pos, Reason: fmt.Sprintf("%s 没有字段 %s", target.Class.Name, t.name)}
@@ -103,6 +115,9 @@ func (t *fieldTarget) get() (object.Object, error) {
 func (t *fieldTarget) set(val object.Object) error {
 	switch target := t.target.(type) {
 	case *Instance:
+		if err := t.checkFieldAccess(target); err != nil {
+			return err
+		}
 		if err := target.setField(t.name, val); err != nil {
 			return &EvalError{Pos: t.pos, Reason: err.Error()}
 		}
@@ -130,7 +145,7 @@ func resolveAssignTarget(expr ast.Expression, env *Environment) (assignTarget, e
 		if err != nil {
 			return nil, err
 		}
-		return &fieldTarget{target: target, name: node.Name, pos: node.Position}, nil
+		return &fieldTarget{target: target, name: node.Name, pos: node.Position, env: env}, nil
 	}
 	return nil, &EvalError{Pos: expr.Pos(), Reason: "赋值左侧必须是变量、下标或字段"}
 }

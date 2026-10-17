@@ -6,9 +6,10 @@ import (
 )
 
 type FieldDecl struct {
-	Position Position
-	Name     string
-	Type     DeclType
+	Position   Position
+	Name       string
+	Type       DeclType
+	Visibility Visibility
 }
 
 type ClassStmt struct {
@@ -26,6 +27,7 @@ type MethodDef struct {
 	Function     *FunctionLiteral
 	Primitive    bool
 	ReceiverName string
+	Visibility   Visibility
 }
 
 func (n *ClassStmt) Pos() Position  { return n.Position }

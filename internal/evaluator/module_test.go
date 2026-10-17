@@ -120,7 +120,7 @@ func TestModuleCircularImport(t *testing.T) {
 func TestModuleChineseExtension(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "工具.凡")
-	if err := os.WriteFile(path, []byte("导出 变量 名 = \"库\"\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("公开 变量 名 = \"库\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	loader := NewLoader(dir)
@@ -136,7 +136,7 @@ func TestModuleChineseExtension(t *testing.T) {
 func TestModuleExplicitChineseExtension(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "工具.凡")
-	if err := os.WriteFile(path, []byte("导出 变量 名 = \"库\"\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("公开 变量 名 = \"库\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	loader := NewLoader(dir)
@@ -152,7 +152,7 @@ func TestModuleExplicitChineseExtension(t *testing.T) {
 func TestModuleLegacyExtensionStillSupported(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "工具.fan")
-	if err := os.WriteFile(path, []byte("导出 变量 名 = \"旧\"\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("公开 变量 名 = \"旧\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	loader := NewLoader(dir)
@@ -169,7 +169,7 @@ func TestModuleResolvesFromConfiguredSdkDir(t *testing.T) {
 	base := t.TempDir()
 	sdkDir := t.TempDir()
 	path := filepath.Join(sdkDir, "基础.凡")
-	if err := os.WriteFile(path, []byte("导出 变量 版本 = 1\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("公开 变量 版本 = 1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	loader := NewLoader(sdkDir)

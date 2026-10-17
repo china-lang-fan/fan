@@ -80,6 +80,7 @@ type Parser struct {
 	cur            token.Token
 	peek           token.Token
 	peek2          token.Token
+	peek3          token.Token
 	errors         Errors
 	parenDepth     int
 	implicitCallOK bool
@@ -90,6 +91,7 @@ func New(source string) *Parser {
 	p.cur = p.loadNextToken()
 	p.peek = p.loadNextToken()
 	p.peek2 = p.loadNextToken()
+	p.peek3 = p.loadNextToken()
 	return p
 }
 
@@ -108,12 +110,14 @@ func (p *Parser) Errors() Errors { return p.errors }
 func (p *Parser) next() {
 	p.cur = p.peek
 	p.peek = p.peek2
-	p.peek2 = p.loadNextToken()
+	p.peek2 = p.peek3
+	p.peek3 = p.loadNextToken()
 	if p.parenDepth > 0 {
 		for p.cur.Type == token.NEWLINE {
 			p.cur = p.peek
 			p.peek = p.peek2
-			p.peek2 = p.loadNextToken()
+			p.peek2 = p.peek3
+			p.peek3 = p.loadNextToken()
 		}
 	}
 }
@@ -177,8 +181,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseThrowStatement()
 	case p.cur.Type == token.IMPORT:
 		return p.parseImportStatement()
-	case p.cur.Type == token.EXPORT:
-		return p.parseExportStatement()
+	case p.cur.Type == token.PUBLIC:
+		return p.parseVisibilityStatement(ast.VisPublic)
+	case p.cur.Type == token.PRIVATE:
+		return p.parseVisibilityStatement(ast.VisPrivate)
 	case p.cur.Type == token.DEFINE:
 		p.next()
 		switch {
@@ -1321,8 +1327,9 @@ func moduleBaseName(path string) string {
 	return base
 }
 
-func (p *Parser) parseExportStatement() ast.Statement {
+func (p *Parser) parseVisibilityStatement(vis ast.Visibility) ast.Statement {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	kw := p.cur.Literal
 	p.next()
 	var inner ast.Statement
 	switch p.cur.Type {
@@ -1357,21 +1364,30 @@ func (p *Parser) parseExportStatement() ast.Statement {
 	case token.VAR, token.CONST:
 		inner = p.parseVarDecl()
 	default:
-		p.addError(p.cur, "导出 后应为 变量/常量/函数/模型")
+		p.addError(p.cur, "%s 后应为 变量/常量/函数/模型/接口/类型/方法定义", kw)
 		return nil
 	}
 	if inner == nil {
 		return nil
 	}
-	name := exportedName(inner)
+	applyVisibility(inner, vis)
+	name := declaredName(inner)
 	if name == "" {
-		p.addError(p.cur, "导出 语句必须带名字")
+		p.addError(p.cur, "%s 语句必须带名字", kw)
 		return nil
 	}
-	return &ast.ExportStmt{Position: pos, Name: name, Inner: inner}
+	return &ast.VisibilityStmt{Position: pos, Name: name, Visibility: vis, Inner: inner}
 }
 
-func exportedName(stmt ast.Statement) string {
+// applyVisibility 把可见性写入被修饰的具体声明。
+func applyVisibility(stmt ast.Statement, vis ast.Visibility) {
+	switch n := stmt.(type) {
+	case *ast.MethodDef:
+		n.Visibility = vis
+	}
+}
+
+func declaredName(stmt ast.Statement) string {
 	switch n := stmt.(type) {
 	case *ast.VarDecl:
 		return n.Name
@@ -1494,7 +1510,7 @@ func (p *Parser) parseTaggedStatement() ast.Statement {
 		literal.Tags = append(literal.Tags, tags...)
 	case *ast.MethodDef:
 		target.Function.Tags = append(target.Function.Tags, tags...)
-	case *ast.ExportStmt:
+	case *ast.VisibilityStmt:
 		if decl, ok := target.Inner.(*ast.VarDecl); ok {
 			if literal, ok := decl.Value.(*ast.FunctionLiteral); ok {
 				literal.Tags = append(literal.Tags, tags...)
@@ -1948,7 +1964,20 @@ func (p *Parser) parseClassStatement() ast.Statement {
 		case token.ILLEGAL:
 			p.addError(p.cur, "非法字符：%s", p.cur.Literal)
 			return nil
-		case token.VAR:
+		case token.VAR, token.PUBLIC, token.PRIVATE:
+			fieldVis := ast.VisFile
+			if p.cur.Type == token.PUBLIC || p.cur.Type == token.PRIVATE {
+				if p.cur.Type == token.PUBLIC {
+					fieldVis = ast.VisPublic
+				} else {
+					fieldVis = ast.VisPrivate
+				}
+				p.next()
+				if p.cur.Type != token.VAR {
+					p.addError(p.cur, "可见性修饰后应为 变量 字段声明")
+					return nil
+				}
+			}
 			p.next()
 			dt := ast.TypeAny
 			if isTypeToken(p.cur.Type) {
@@ -1962,9 +1991,10 @@ func (p *Parser) parseClassStatement() ast.Statement {
 			nameToken := p.cur
 			p.next()
 			cls.Fields = append(cls.Fields, ast.FieldDecl{
-				Position: ast.Position{Line: nameToken.Line, Column: nameToken.Column},
-				Name:     nameToken.Literal,
-				Type:     dt,
+				Position:   ast.Position{Line: nameToken.Line, Column: nameToken.Column},
+				Name:       nameToken.Literal,
+				Type:       dt,
+				Visibility: fieldVis,
 			})
 			if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF {
 				p.addError(p.cur, "字段声明应换行结束")
@@ -2103,6 +2133,9 @@ func (p *Parser) parseIdentMemberStatement() ast.Statement {
 	if p.peekTwo().Type == token.METHOD {
 		return p.parseMethodDefinition()
 	}
+	if (p.peekTwo().Type == token.PUBLIC || p.peekTwo().Type == token.PRIVATE) && p.peek3.Type == token.METHOD {
+		return p.parseMethodDefinition()
+	}
 	return p.parseExpressionStatement()
 }
 
@@ -2130,6 +2163,15 @@ func (p *Parser) parseMethodDefinition() ast.Statement {
 		return nil
 	}
 	p.next()
+	vis := ast.VisFile
+	if p.cur.Type == token.PUBLIC || p.cur.Type == token.PRIVATE {
+		if p.cur.Type == token.PUBLIC {
+			vis = ast.VisPublic
+		} else {
+			vis = ast.VisPrivate
+		}
+		p.next()
+	}
 	if p.cur.Type != token.METHOD {
 		p.addError(p.cur, "类型成员定义应使用 方法 关键字")
 		return nil
@@ -2159,6 +2201,7 @@ func (p *Parser) parseMethodDefinition() ast.Statement {
 		MethodName:   methodName,
 		ReceiverName: receiverName,
 		Primitive:    primitive,
+		Visibility:   vis,
 		Function: &ast.FunctionLiteral{
 			Position:    pos,
 			Params:      params,

@@ -352,9 +352,9 @@ func TestImportMissingPath(t *testing.T) {
 }
 
 func TestExportVar(t *testing.T) {
-	src := `导出 变量 x = 1`
+	src := `公开 变量 x = 1`
 	prog := mustParse(t, src)
-	exp, ok := prog.Statements[0].(*ast.ExportStmt)
+	exp, ok := prog.Statements[0].(*ast.VisibilityStmt)
 	if !ok {
 		t.Fatalf("应为导出语句，实际 %T", prog.Statements[0])
 	}
@@ -364,18 +364,18 @@ func TestExportVar(t *testing.T) {
 }
 
 func TestExportFunction(t *testing.T) {
-	src := "导出 函数 f()\n    返回 1\n结束"
+	src := "公开 函数 f()\n    返回 1\n结束"
 	prog := mustParse(t, src)
-	exp := prog.Statements[0].(*ast.ExportStmt)
+	exp := prog.Statements[0].(*ast.VisibilityStmt)
 	if exp.Name != "f" {
 		t.Fatalf("导出函数名错误：%s", exp.Name)
 	}
 }
 
 func TestExportClass(t *testing.T) {
-	src := "导出 模型 点\n    变量 x\n结束"
+	src := "公开 模型 点\n    变量 x\n结束"
 	prog := mustParse(t, src)
-	exp := prog.Statements[0].(*ast.ExportStmt)
+	exp := prog.Statements[0].(*ast.VisibilityStmt)
 	if exp.Name != "点" {
 		t.Fatalf("导出模型名错误：%s", exp.Name)
 	}

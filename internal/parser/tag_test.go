@@ -91,13 +91,13 @@ func TestParseBareIdentifierArgumentStaysFunction(t *testing.T) {
 
 func TestParseTaggedExport(t *testing.T) {
 	src := `@内建("type")
-导出 函数 type(值) -> 字符串
+公开 函数 type(值) -> 字符串
 结束`
 	prog, errs := ParseProgram(src)
 	if len(errs) > 0 {
 		t.Fatalf("解析错误：%v", errs)
 	}
-	exportStmt := prog.Statements[0].(*ast.ExportStmt)
+	exportStmt := prog.Statements[0].(*ast.VisibilityStmt)
 	decl := exportStmt.Inner.(*ast.VarDecl)
 	fn := decl.Value.(*ast.FunctionLiteral)
 	if len(fn.Tags) != 1 {

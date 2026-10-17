@@ -71,7 +71,7 @@ func TestCompletionClassMember(t *testing.T) {
 func TestCrossModuleHover(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir+"/助手.凡", `# 助手问候
-导出 函数 问候(名字 字符串) -> 字符串
+公开 函数 问候(名字 字符串) -> 字符串
     返回 名字
 结束
 `)
