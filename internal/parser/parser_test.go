@@ -132,6 +132,42 @@ func TestStringEscapes(t *testing.T) {
 	}
 }
 
+func TestStringInterpolationAST(t *testing.T) {
+	prog := mustParse(t, `变量 名称 = "凡"
+变量 s = "你好 $名称 版本 ${名称 加 1}!"`)
+	decl := prog.Statements[1].(*ast.VarDecl)
+	node, ok := decl.Value.(*ast.InterpString)
+	if !ok {
+		t.Fatalf("期望 InterpString，得到 %T", decl.Value)
+	}
+	if len(node.Exprs) != 2 {
+		t.Fatalf("期望 2 个插值表达式，得到 %d", len(node.Exprs))
+	}
+	if id, ok := node.Exprs[0].(*ast.Identifier); !ok || id.Name != "名称" {
+		t.Fatalf("第一个插值应为标识符 名称，得到 %T", node.Exprs[0])
+	}
+	wantParts := []string{"你好 ", " 版本 ", "!"}
+	if len(node.Parts) != len(wantParts) {
+		t.Fatalf("片段数期望 %d，得到 %d：%q", len(wantParts), len(node.Parts), node.Parts)
+	}
+	for i, w := range wantParts {
+		if node.Parts[i] != w {
+			t.Fatalf("片段 %d 期望 %q，得到 %q", i, w, node.Parts[i])
+		}
+	}
+}
+
+func TestStringInterpolationAdjacent(t *testing.T) {
+	prog := mustParse(t, `"$a$b"`)
+	lit := prog.Statements[0].(*ast.ExpressionStmt).Expression.(*ast.InterpString)
+	if len(lit.Exprs) != 2 {
+		t.Fatalf("相邻插值应有 2 个表达式，得到 %d", len(lit.Exprs))
+	}
+	if len(lit.Parts) != 3 {
+		t.Fatalf("相邻插值应有 3 个文本片段（均可为空），得到 %d %q", len(lit.Parts), lit.Parts)
+	}
+}
+
 func TestParenthesesAcrossLines(t *testing.T) {
 	prog := mustParse(t, "(1 +\n 2)")
 	if len(prog.Statements) != 1 {

@@ -13,6 +13,12 @@ const (
 	STRING Type = "STRING"
 	CHAR   Type = "CHAR"
 
+	// 字符串插值：$名称 / ${表达式}
+	STRING_PART  Type = "STRING_PART"
+	INTERP_START Type = "INTERP_START" // ${
+	INTERP_IDENT Type = "INTERP_IDENT" // $名称
+	INTERP_END   Type = "INTERP_END"   // 插值字符串收尾的引号
+
 	ASSIGN   Type = "ASSIGN"
 	PLUS_EQ  Type = "PLUS_EQ"
 	MINUS_EQ Type = "MINUS_EQ"

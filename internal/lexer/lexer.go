@@ -16,6 +16,7 @@ type Lexer struct {
 	col         int
 	prevTok     token.Type
 	spaceBefore bool
+	queue       []token.Token
 }
 
 func New(source string) *Lexer {
@@ -29,6 +30,14 @@ func New(source string) *Lexer {
 }
 
 func (l *Lexer) NextToken() token.Token {
+	if len(l.queue) > 0 {
+		tok := l.queue[0]
+		l.queue = l.queue[1:]
+		if tok.Type != token.EOF {
+			l.prevTok = tok.Type
+		}
+		return tok
+	}
 	l.spaceBefore = l.skipSpaces()
 	if l.pos >= len(l.src) {
 		return l.emit(token.EOF, "")
@@ -65,6 +74,11 @@ func (l *Lexer) NextToken() token.Token {
 		return l.readIdentifierOrKeyword()
 	}
 
+	return l.readOperator()
+}
+
+func (l *Lexer) readOperator() token.Token {
+	r := l.src[l.pos]
 	switch r {
 	case '(', '（':
 		return l.emitAndAdvance(token.LPAREN, string(r))
@@ -255,19 +269,43 @@ func (l *Lexer) readNumber() token.Token {
 
 func (l *Lexer) readString() token.Token {
 	startCol := l.col
-	l.advance()
+	line := l.line
+	l.advance() // 跳过开头引号
 	var b strings.Builder
+	var out []token.Token
+	flush := func() {
+		if b.Len() > 0 {
+			out = append(out, token.Token{
+				Type: token.STRING_PART, Literal: b.String(), Line: line, Column: startCol,
+			})
+			b.Reset()
+		}
+	}
+	hasInterp := false
 	for l.pos < len(l.src) {
 		r := l.src[l.pos]
 		if r == '"' {
 			l.advance()
-			return token.Token{Type: token.STRING, Literal: b.String(), Line: l.line, Column: startCol}
+			if !hasInterp {
+				return token.Token{Type: token.STRING, Literal: b.String(), Line: line, Column: startCol}
+			}
+			flush()
+			out = append(out, token.Token{Type: token.INTERP_END, Line: line, Column: startCol})
+			first := out[0]
+			l.queue = append(l.queue, out[1:]...)
+			return first
 		}
 		if r == '\n' {
 			return token.Token{Type: token.ILLEGAL, Literal: "字符串未闭合", Line: l.line, Column: startCol}
 		}
 		if r == '\\' {
 			next := l.peek(1)
+			if next == '$' {
+				b.WriteRune('$')
+				l.advance()
+				l.advance()
+				continue
+			}
 			escaped, ok := escapeRune(next)
 			if !ok {
 				return token.Token{Type: token.ILLEGAL, Literal: fmt.Sprintf("未知转义 \\%s", string(next)), Line: l.line, Column: l.col}
@@ -277,10 +315,129 @@ func (l *Lexer) readString() token.Token {
 			l.advance()
 			continue
 		}
+		if r == '$' {
+			after := l.peek(1)
+			if after == '{' {
+				hasInterp = true
+				flush()
+				out = append(out, token.Token{Type: token.INTERP_START, Line: l.line, Column: l.col})
+				l.advance() // $
+				l.advance() // {
+				depth := 1
+				for depth > 0 {
+					if l.pos >= len(l.src) {
+						return token.Token{Type: token.ILLEGAL, Literal: "插值表达式未闭合", Line: l.line, Column: startCol}
+					}
+					c := l.src[l.pos]
+					switch {
+					case c == '{':
+						depth++
+						tok := l.emitAndAdvance(token.LBRACE, "{")
+						out = append(out, tok)
+					case c == '}':
+						depth--
+						if depth == 0 {
+							l.advance()
+							out = append(out, token.Token{Type: token.INTERP_END, Line: l.line, Column: l.col})
+						} else {
+							out = append(out, l.emitAndAdvance(token.RBRACE, "}"))
+						}
+					case c == '"':
+						out = append(out, l.readStringInline())
+					default:
+						l.spaceBefore = l.skipSpaces()
+						if l.pos >= len(l.src) {
+							return token.Token{Type: token.ILLEGAL, Literal: "插值表达式未闭合", Line: l.line, Column: startCol}
+						}
+						tok := l.nextRawToken()
+						tok.LeadingSpace = l.spaceBefore
+						out = append(out, tok)
+					}
+				}
+			} else if isIdentStart(after) {
+				hasInterp = true
+				flush()
+				l.advance() // $
+				start := l.pos
+				for l.pos < len(l.src) && isIdentPart(l.src[l.pos]) {
+					l.advance()
+				}
+				name := string(l.src[start:l.pos])
+				out = append(out, token.Token{Type: token.INTERP_IDENT, Literal: name, Line: l.line, Column: startCol})
+			} else {
+				// $ 后不是标识符或 {，按普通字符处理（常见于正则等）。
+				b.WriteRune('$')
+				l.advance()
+			}
+			continue
+		}
 		b.WriteRune(r)
 		l.advance()
 	}
-	return token.Token{Type: token.ILLEGAL, Literal: "字符串未闭合", Line: l.line, Column: startCol}
+	return token.Token{Type: token.ILLEGAL, Literal: "字符串未闭合", Line: line, Column: startCol}
+}
+
+// readStringInline 读取插值表达式内部的嵌套普通字符串，返回单个 STRING token。
+func (l *Lexer) readStringInline() token.Token {
+	startCol := l.col
+	startLine := l.line
+	l.advance() // 引号
+	var b strings.Builder
+	for l.pos < len(l.src) {
+		r := l.src[l.pos]
+		if r == '"' {
+			l.advance()
+			return token.Token{Type: token.STRING, Literal: b.String(), Line: startLine, Column: startCol}
+		}
+		if r == '\\' {
+			next := l.peek(1)
+			if next == '$' {
+				b.WriteRune('$')
+				l.advance()
+				l.advance()
+				continue
+			}
+			if escaped, ok := escapeRune(next); ok {
+				b.WriteRune(escaped)
+				l.advance()
+				l.advance()
+				continue
+			}
+		}
+		b.WriteRune(r)
+		l.advance()
+	}
+	return token.Token{Type: token.ILLEGAL, Literal: "字符串未闭合", Line: startLine, Column: startCol}
+}
+
+// nextRawToken 在不触发字符串插值队列的情况下切下一个 token。
+func (l *Lexer) nextRawToken() token.Token {
+	if l.pos >= len(l.src) {
+		return l.emit(token.EOF, "")
+	}
+	r := l.src[l.pos]
+	if r == '\n' {
+		tok := l.emit(token.NEWLINE, "\n")
+		l.advance()
+		l.line++
+		l.col = 1
+		return tok
+	}
+	if r == '#' {
+		l.consumeLineComment()
+		l.spaceBefore = l.skipSpaces()
+		return l.nextRawToken()
+	}
+	if r == '\'' || r == '‘' {
+		return l.readChar()
+	}
+	if isDigit(r) {
+		return l.readNumber()
+	}
+	if isIdentStart(r) {
+		return l.readIdentifierOrKeyword()
+	}
+	return l.readOperator()
 }
 
 // readChar 读取字符字面量，支持半角单引号（'A'）与全角单引号（‘中’）。

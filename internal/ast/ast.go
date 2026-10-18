@@ -182,6 +182,22 @@ func (n *StringLiteral) Pos() Position   { return n.Position }
 func (n *StringLiteral) expressionNode() {}
 func (n *StringLiteral) String() string  { return fmt.Sprintf("%q", n.Value) }
 
+// InterpString 是插值字符串：Parts 与 Exprs 交错出现，
+// 形如 "a$x${y+1}b" 表示 Parts=["a","","b"]、Exprs=[x, y+1]。
+type InterpString struct {
+	Position Position
+	Parts    []string
+	Exprs    []Expression
+}
+
+func (n *InterpString) Pos() Position   { return n.Position }
+func (n *InterpString) expressionNode() {}
+func (n *InterpString) String() string {
+	var b strings.Builder
+	b.WriteString("插值字符串")
+	return b.String()
+}
+
 type CharLiteral struct {
 	Position Position
 	Value    rune

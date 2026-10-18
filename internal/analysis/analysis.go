@@ -367,6 +367,10 @@ func childrenOf(node ast.Node) []ast.Node {
 			addExpr(pair.Key)
 			addExpr(pair.Value)
 		}
+	case *ast.InterpString:
+		for _, e := range n.Exprs {
+			addExpr(e)
+		}
 	case *ast.IfStmt:
 		for _, branch := range n.Branches {
 			addExpr(branch.Condition)

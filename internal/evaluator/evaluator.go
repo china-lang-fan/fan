@@ -113,6 +113,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return &object.Float{Value: n.Value}, nil
 	case *ast.StringLiteral:
 		return &object.String{Value: n.Value}, nil
+	case *ast.InterpString:
+		return evalInterpString(n, env)
 	case *ast.CharLiteral:
 		return &object.Char{Value: n.Value}, nil
 	case *ast.BoolLiteral:

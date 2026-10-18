@@ -956,6 +956,67 @@ func (p *Parser) parseDictLiteral() ast.Expression {
 	}
 }
 
+// parseInterpString 解析词法器切好的插值字符串 token 序列。
+// 形式：STRING_PART (INTERP_IDENT | INTERP_START 表达式 INTERP_END)
+//
+//	[STRING_PART ...] INTERP_END
+func (p *Parser) parseInterpString() ast.Expression {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	node := &ast.InterpString{Position: pos}
+	// 字符串可能以文本片段或插值开头；用 pendingPart 记录是否尚欠一个文本片段。
+	if p.cur.Type == token.STRING_PART {
+		node.Parts = append(node.Parts, p.cur.Literal)
+		p.next()
+	} else {
+		node.Parts = append(node.Parts, "")
+	}
+	for {
+		switch p.cur.Type {
+		case token.STRING_PART:
+			node.Parts = append(node.Parts, p.cur.Literal)
+			p.next()
+		case token.INTERP_IDENT:
+			node.Exprs = append(node.Exprs, &ast.Identifier{
+				Position: ast.Position{Line: p.cur.Line, Column: p.cur.Column},
+				Name:     p.cur.Literal,
+			})
+			p.next()
+			// 插值后若紧跟另一个插值或字符串收尾，补一个空文本片段保持对齐。
+			if p.cur.Type == token.INTERP_IDENT || p.cur.Type == token.INTERP_START ||
+				p.cur.Type == token.INTERP_END {
+				node.Parts = append(node.Parts, "")
+			}
+		case token.INTERP_START:
+			p.next()
+			expr := p.parseExpression(LOWEST)
+			if expr == nil {
+				p.addError(p.cur, "插值表达式为空")
+				return nil
+			}
+			node.Exprs = append(node.Exprs, expr)
+			if p.cur.Type != token.INTERP_END {
+				p.addError(p.cur, "插值表达式缺少右花括号 }")
+				return nil
+			}
+			p.next() // 消费 ${ 表达式后的 INTERP_END
+			// ${...} 后可能是文本片段、另一个插值或字符串收尾。
+			if p.cur.Type == token.INTERP_IDENT || p.cur.Type == token.INTERP_START ||
+				p.cur.Type == token.INTERP_END {
+				node.Parts = append(node.Parts, "")
+			}
+		case token.INTERP_END:
+			p.next() // 消费字符串收尾
+			if len(node.Parts) == len(node.Exprs) {
+				node.Parts = append(node.Parts, "")
+			}
+			return node
+		default:
+			p.addError(p.cur, "插值字符串格式错误，意外的 %s", p.cur.Type)
+			return nil
+		}
+	}
+}
+
 func (p *Parser) currentPrecedence() precedence {
 	if pr, ok := precedences[p.cur.Type]; ok {
 		return pr
@@ -988,6 +1049,8 @@ func (p *Parser) parsePrefix() ast.Expression {
 		node := &ast.StringLiteral{Position: pos, Value: p.cur.Literal}
 		p.next()
 		return node
+	case token.STRING_PART, token.INTERP_IDENT, token.INTERP_START:
+		return p.parseInterpString()
 	case token.CHAR:
 		runes := []rune(p.cur.Literal)
 		if len(runes) != 1 {

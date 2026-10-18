@@ -144,6 +144,36 @@ func TestStringUnterminated(t *testing.T) {
 	}
 }
 
+func TestStringInterpolationIdent(t *testing.T) {
+	expect(t, `"你好 $名称"`, []token.Token{
+		{Type: token.STRING_PART, Literal: "你好 "},
+		{Type: token.INTERP_IDENT, Literal: "名称"},
+		{Type: token.INTERP_END, Literal: ""},
+		{Type: token.EOF, Literal: ""},
+	})
+}
+
+func TestStringInterpolationExpr(t *testing.T) {
+	expect(t, `"a${x 加 1}b"`, []token.Token{
+		{Type: token.STRING_PART, Literal: "a"},
+		{Type: token.INTERP_START, Literal: ""},
+		{Type: token.IDENT, Literal: "x"},
+		{Type: token.PLUS, Literal: "加"},
+		{Type: token.INT, Literal: "1"},
+		{Type: token.INTERP_END, Literal: ""},
+		{Type: token.STRING_PART, Literal: "b"},
+		{Type: token.INTERP_END, Literal: ""},
+		{Type: token.EOF, Literal: ""},
+	})
+}
+
+func TestStringDollarEscapedAndLiteral(t *testing.T) {
+	expect(t, `"\$x $100"`, []token.Token{
+		{Type: token.STRING, Literal: "$x $100"},
+		{Type: token.EOF, Literal: ""},
+	})
+}
+
 func TestHashComment(t *testing.T) {
 	expect(t, "# 这是注释\n年龄 = 18 # 行尾", []token.Token{
 		{Type: token.NEWLINE, Literal: "\n"},
