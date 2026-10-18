@@ -157,7 +157,7 @@ type jsonrpcMessage struct {
 	ID      *json.RawMessage `json:"id,omitempty"`
 	Method  string           `json:"method,omitempty"`
 	Params  json.RawMessage  `json:"params,omitempty"`
-	Result  any              `json:"result,omitempty"`
+	Result  any              `json:"result"`
 	Error   *jsonRPCError    `json:"error,omitempty"`
 }
 

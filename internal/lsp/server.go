@@ -56,8 +56,31 @@ func (s *Server) Run() error {
 		if msg.Method == "exit" {
 			return nil
 		}
-		s.handle(msg)
+		s.handleSafe(msg)
 	}
+}
+
+// handleSafe 保证任何请求都会得到响应：handle 中的 panic 不应杀死整个
+// 语言服务器进程，否则客户端会收到“既无 result 也无 error”的坏响应。
+func (s *Server) handleSafe(msg jsonrpcMessage) {
+	if msg.ID == nil {
+		// 通知无需响应；即使 panic 也只记录，不让进程崩溃。
+		defer func() { _ = recover() }()
+		s.handle(msg)
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			_ = s.writeMessage(jsonrpcMessage{
+				ID: msg.ID,
+				Error: &jsonRPCError{
+					Code:    -32603,
+					Message: fmt.Sprintf("内部错误：%v", r),
+				},
+			})
+		}
+	}()
+	s.handle(msg)
 }
 
 func (s *Server) readMessage() (jsonrpcMessage, error) {

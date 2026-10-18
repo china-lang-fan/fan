@@ -209,3 +209,56 @@ func TestLSPCapabilitiesAndHover(t *testing.T) {
 		t.Fatalf("悬停未返回函数签名和文档注释：%s", output.String())
 	}
 }
+
+// TestLSPHoverNullResult 悬停在无符号位置时也必须显式返回 "result":null，
+// 否则客户端会报“响应既无 result 也无 error”。
+func TestLSPHoverNullResult(t *testing.T) {
+	source := "变量 x = 1\n"
+	var input bytes.Buffer
+	input.WriteString(frame("initialize", 1, map[string]any{}))
+	input.WriteString(frame("textDocument/didOpen", nil, map[string]any{
+		"textDocument": map[string]any{
+			"uri": "file:///t.凡", "languageId": "fan", "version": 1, "text": source,
+		},
+	}))
+	// 悬停在空白位置，没有任何符号。
+	input.WriteString(frame("textDocument/hover", 2, map[string]any{
+		"textDocument": map[string]any{"uri": "file:///t.凡"},
+		"position":     map[string]any{"line": 0, "character": 0},
+	}))
+	input.WriteString(frame("exit", nil, nil))
+
+	output := newSafeBuffer()
+	server := NewServer(&input, output)
+	if err := server.Run(); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, raw := range strings.Split(output.String(), "\r\n\r\n") {
+		idx := strings.Index(raw, "{")
+		if idx < 0 {
+			continue
+		}
+		var msg jsonrpcMessage
+		if json.Unmarshal([]byte(raw[idx:]), &msg) != nil || msg.ID == nil {
+			continue
+		}
+		var id int
+		_ = json.Unmarshal(*msg.ID, &id)
+		if id == 2 {
+			found = true
+			if msg.Error != nil {
+				t.Fatalf("空悬停不应报错：%v", msg.Error)
+			}
+			if msg.Result != nil {
+				t.Fatalf("无符号处悬停应为 null，实际：%v", msg.Result)
+			}
+			if !strings.Contains(raw[idx:], `"result":null`) {
+				t.Fatalf("响应必须显式包含 result:null：%s", raw[idx:])
+			}
+		}
+	}
+	if !found {
+		t.Fatal("未收到 hover 响应")
+	}
+}
