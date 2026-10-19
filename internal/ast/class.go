@@ -67,3 +67,38 @@ func (n *FieldAssignExpr) statementNode() {}
 func (n *FieldAssignExpr) String() string {
 	return fmt.Sprintf("%s.%s = %s", n.Object.String(), n.Name, n.Value.String())
 }
+
+// CompositeField 是复合字面量中的一个具名字段初始化项。
+type CompositeField struct {
+	Name    string
+	NamePos Position
+	Value   Expression
+}
+
+// CompositeLiteral 表示模型复合字面量，如 矩形{宽: 3, 高: 4}。
+// Model 通常是 *Identifier，跨模块时为 *MemberExpr（工具.矩形）。
+type CompositeLiteral struct {
+	Position Position
+	Model    Expression
+	Fields   []CompositeField
+}
+
+func (n *CompositeLiteral) Pos() Position   { return n.Position }
+func (n *CompositeLiteral) expressionNode() {}
+func (n *CompositeLiteral) String() string {
+	var sb strings.Builder
+	sb.WriteString(n.Model.String())
+	sb.WriteString("{")
+	for i, f := range n.Fields {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(f.Name)
+		sb.WriteString(": ")
+		if f.Value != nil {
+			sb.WriteString(f.Value.String())
+		}
+	}
+	sb.WriteString("}")
+	return sb.String()
+}

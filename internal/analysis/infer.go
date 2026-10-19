@@ -24,6 +24,14 @@ func (idx *Index) inferType(expr ast.Expression, locals map[string]string) strin
 		return "数组"
 	case *ast.DictLiteral:
 		return "字典"
+	case *ast.CompositeLiteral:
+		if id, ok := n.Model.(*ast.Identifier); ok {
+			return id.Name
+		}
+		if m, ok := n.Model.(*ast.MemberExpr); ok {
+			return m.Name
+		}
+		return ""
 	case *ast.Identifier:
 		return idx.inferIdentifier(n.Name, locals)
 	case *ast.CallExpr:

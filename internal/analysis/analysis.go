@@ -62,6 +62,7 @@ func AnalyzeIndex(index *Index) []Diagnostic {
 	diags = append(diags, index.root.checkImports(index)...)
 	diags = append(diags, index.root.checkUndefinedNames(index)...)
 	diags = append(diags, index.checkEmbedAmbiguity()...)
+	diags = append(diags, index.checkCompositeLiterals()...)
 	return diags
 }
 
@@ -370,6 +371,11 @@ func childrenOf(node ast.Node) []ast.Node {
 	case *ast.InterpString:
 		for _, e := range n.Exprs {
 			addExpr(e)
+		}
+	case *ast.CompositeLiteral:
+		// 模型名由 composite-unknown-model 专门诊断，这里只遍历字段值。
+		for _, f := range n.Fields {
+			addExpr(f.Value)
 		}
 	case *ast.IfStmt:
 		for _, branch := range n.Branches {

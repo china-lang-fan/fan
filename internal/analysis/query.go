@@ -419,7 +419,79 @@ func (idx *Index) Completion(line0, char16 int) []CompletionItem {
 		}
 		return idx.memberCompletions(owner)
 	}
+	if model, ok := compositeFieldCompletionModel(line, char16); ok {
+		return idx.modelFieldCompletions(model)
+	}
 	return idx.rootCompletions(locals)
+}
+
+// compositeFieldCompletionModel 判断光标是否位于 模型{…} 复合字面量的
+// 字段名位置（{ 之后或 , 之后，且尚未输入 :），返回模型名。
+func compositeFieldCompletionModel(line string, char16 int) (string, bool) {
+	runes := []rune(line)
+	col := utf16ToRuneCol(line, char16)
+	if col <= 0 || col > len(runes) {
+		return "", false
+	}
+	// 从光标向左回退，找最近的未闭合 {，确认中间没有 :（字段值位置不补字段名）。
+	depth := 0
+	for i := col - 1; i >= 0; i-- {
+		switch runes[i] {
+		case '}':
+			depth++
+		case '{':
+			if depth > 0 {
+				depth--
+				continue
+			}
+			// i 为最近的 {；其左侧应紧邻模型标识符。
+			j := i - 1
+			for j >= 0 && isLetter(runes[j]) {
+				j--
+			}
+			if j+1 >= i {
+				return "", false
+			}
+			model := string(runes[j+1 : i])
+			// 光标到 { 之间若已出现 ':'，说明正在输入字段值，不补字段名。
+			segment := string(runes[i+1 : col])
+			if strings.Contains(segment, ":") {
+				return "", false
+			}
+			return model, true
+		case ':', ')':
+			// 顶层 ':' 表示已进入字段值；')' 说明 { 不属于本调用。
+			if depth == 0 {
+				return "", false
+			}
+		}
+	}
+	return "", false
+}
+
+// modelFieldCompletions 返回模型直接字段与直接嵌入名，用于复合字面量补全。
+func (idx *Index) modelFieldCompletions(model string) []CompletionItem {
+	class := idx.lookupClassAnyDoc(model)
+	if class == nil {
+		return nil
+	}
+	var items []CompletionItem
+	seen := map[string]bool{}
+	for _, child := range class.Children {
+		if child.Kind != KindField || seen[child.Name] {
+			continue
+		}
+		seen[child.Name] = true
+		items = append(items, CompletionItem{Label: child.Name, Kind: KindField, Detail: child.Detail})
+	}
+	for _, embed := range class.Embeds {
+		if seen[embed] {
+			continue
+		}
+		seen[embed] = true
+		items = append(items, CompletionItem{Label: embed, Kind: KindClass, Detail: "嵌入"})
+	}
+	return items
 }
 
 // completionOwner 检查光标前是否为 “.” 或 “的 ”，返回左表达式名字。

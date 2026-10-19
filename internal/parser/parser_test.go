@@ -168,6 +168,53 @@ func TestStringInterpolationAdjacent(t *testing.T) {
 	}
 }
 
+func TestCompositeLiteralAST(t *testing.T) {
+	prog := mustParse(t, `变量 r = 矩形{宽: 3, 高: 4}`)
+	decl := prog.Statements[0].(*ast.VarDecl)
+	lit, ok := decl.Value.(*ast.CompositeLiteral)
+	if !ok {
+		t.Fatalf("期望 CompositeLiteral，得到 %T", decl.Value)
+	}
+	model, ok := lit.Model.(*ast.Identifier)
+	if !ok || model.Name != "矩形" {
+		t.Fatalf("模型名错误：%T %v", lit.Model, lit.Model)
+	}
+	if len(lit.Fields) != 2 || lit.Fields[0].Name != "宽" || lit.Fields[1].Name != "高" {
+		t.Fatalf("字段解析错误：%+v", lit.Fields)
+	}
+}
+
+func TestCompositeLiteralNestedAndTrailingComma(t *testing.T) {
+	prog := mustParse(t, "变量 p = 人{姓名: \"甲\", 宠物: 狗{名字: \"乙\"},}")
+	decl := prog.Statements[0].(*ast.VarDecl)
+	lit := decl.Value.(*ast.CompositeLiteral)
+	if len(lit.Fields) != 2 {
+		t.Fatalf("应有 2 个字段（尾随逗号合法），得到 %d", len(lit.Fields))
+	}
+	nested, ok := lit.Fields[1].Value.(*ast.CompositeLiteral)
+	if !ok {
+		t.Fatalf("第二个字段应为嵌套复合字面量，得到 %T", lit.Fields[1].Value)
+	}
+	if id, _ := nested.Model.(*ast.Identifier); id == nil || id.Name != "狗" {
+		t.Fatalf("嵌套模型名错误：%v", nested.Model)
+	}
+}
+
+func TestCompositeLiteralModuleModel(t *testing.T) {
+	prog := mustParse(t, `变量 r = 图形.矩形{宽: 3}`)
+	lit := prog.Statements[0].(*ast.VarDecl).Value.(*ast.CompositeLiteral)
+	m, ok := lit.Model.(*ast.MemberExpr)
+	if !ok || m.Name != "矩形" {
+		t.Fatalf("跨模块模型名错误：%T", lit.Model)
+	}
+}
+
+func TestCompositeLiteralDuplicateFieldFails(t *testing.T) {
+	if _, errs := ParseProgram(`变量 r = 矩形{宽: 1, 宽: 2}`); len(errs) == 0 {
+		t.Fatal("重复字段应解析报错")
+	}
+}
+
 func TestParenthesesAcrossLines(t *testing.T) {
 	prog := mustParse(t, "(1 +\n 2)")
 	if len(prog.Statements) != 1 {

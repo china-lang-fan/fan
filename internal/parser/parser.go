@@ -836,6 +836,18 @@ func (p *Parser) parsePostfix(left ast.Expression) ast.Expression {
 				return nil
 			}
 			left = &ast.CallExpr{Position: pos, Callee: left, Args: args}
+		case token.LBRACE:
+			// 模型复合字面量：标识符{字段: 值}（{ 必须紧邻标识符，无空白）。
+			// 带空白时仍按字典字面量处理，避免与隐式调用混淆。
+			if !p.cur.LeadingSpace && isCompositeModel(left) {
+				node := p.parseCompositeLiteral(left)
+				if node == nil {
+					return nil
+				}
+				left = node
+				continue
+			}
+			return left
 		case token.INC:
 			pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
 			left = &ast.UpdateExpr{Position: pos, Target: left, Op: "加", Prefix: false}
@@ -847,6 +859,76 @@ func (p *Parser) parsePostfix(left ast.Expression) ast.Expression {
 		default:
 			return left
 		}
+	}
+}
+
+// isCompositeModel 判断 postfix 左侧表达式是否可作为模型复合字面量的模型名：
+// 标识符（矩形）或模块成员访问（工具.矩形）。
+func isCompositeModel(expr ast.Expression) bool {
+	switch n := expr.(type) {
+	case *ast.Identifier:
+		return true
+	case *ast.MemberExpr:
+		return isCompositeModel(n.Object)
+	}
+	return false
+}
+
+// parseCompositeLiteral 解析 模型{字段: 值, ...}。调用时 p.cur 为 {。
+// 键必须是裸标识符；{ 与模型名之间不得有空白（由调用处保证）。
+func (p *Parser) parseCompositeLiteral(model ast.Expression) ast.Expression {
+	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+	p.parenDepth++
+	p.next() // 消费 {
+	var fields []ast.CompositeField
+	seen := map[string]bool{}
+	for {
+		if p.cur.Type == token.RBRACE {
+			p.parenDepth--
+			p.next()
+			return &ast.CompositeLiteral{Position: pos, Model: model, Fields: fields}
+		}
+		if p.cur.Type != token.IDENT {
+			p.addError(p.cur, "复合字面量字段名应为裸标识符，形如 矩形{宽: 3}")
+			p.parenDepth--
+			return nil
+		}
+		nameTok := p.cur
+		if seen[nameTok.Literal] {
+			p.addError(nameTok, "复合字面量中字段 %s 重复指定", nameTok.Literal)
+			p.parenDepth--
+			return nil
+		}
+		seen[nameTok.Literal] = true
+		p.next() // 消费字段名
+		if p.cur.Type != token.COLON {
+			p.addError(p.cur, "复合字面量字段名后应为 :")
+			p.parenDepth--
+			return nil
+		}
+		p.next() // 消费 :
+		value := p.parseExpression(LOWEST)
+		if value == nil {
+			p.parenDepth--
+			return nil
+		}
+		fields = append(fields, ast.CompositeField{
+			Name:    nameTok.Literal,
+			NamePos: ast.Position{Line: nameTok.Line, Column: nameTok.Column},
+			Value:   value,
+		})
+		if p.cur.Type == token.COMMA {
+			p.next()
+			continue
+		}
+		if p.cur.Type == token.RBRACE {
+			p.parenDepth--
+			p.next()
+			return &ast.CompositeLiteral{Position: pos, Model: model, Fields: fields}
+		}
+		p.addError(p.cur, "复合字面量字段应以 , 分隔或以 } 结束")
+		p.parenDepth--
+		return nil
 	}
 }
 
