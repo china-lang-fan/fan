@@ -10,6 +10,14 @@ import (
 func evalArrayLiteral(node *ast.ArrayLiteral, env *Environment) (object.Object, error) {
 	elems := make([]object.Object, 0, len(node.Elements))
 	for _, el := range node.Elements {
+		if spread, ok := el.(*ast.SpreadExpr); ok {
+			val, err := evalSpread(spread, env, "数组字面量")
+			if err != nil {
+				return nil, err
+			}
+			elems = append(elems, val.(*spreadMarker).values...)
+			continue
+		}
 		val, err := Eval(el, env)
 		if err != nil {
 			return nil, err
@@ -22,6 +30,21 @@ func evalArrayLiteral(node *ast.ArrayLiteral, env *Environment) (object.Object, 
 func evalDictLiteral(node *ast.DictLiteral, env *Environment) (object.Object, error) {
 	dict := object.NewDict()
 	for _, pair := range node.Pairs {
+		if pair.Spread {
+			val, err := Eval(pair.Value, env)
+			if err != nil {
+				return nil, err
+			}
+			src, ok := val.(*object.Dict)
+			if !ok {
+				return nil, &EvalError{Pos: pair.Value.Pos(), Reason: fmt.Sprintf("字典展开 ... 只能展开字典，实际是 %s", val.Kind())}
+			}
+			for _, k := range src.Keys {
+				v, _ := src.Get(k)
+				dict.Set(k, v)
+			}
+			continue
+		}
 		key, err := Eval(pair.Key, env)
 		if err != nil {
 			return nil, err

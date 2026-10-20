@@ -215,6 +215,55 @@ func TestCompositeLiteralDuplicateFieldFails(t *testing.T) {
 	}
 }
 
+func TestSliceExprAST(t *testing.T) {
+	cases := []struct {
+		src     string
+		lowNil  bool
+		highNil bool
+	}{
+		{`数列[1:3]`, false, false},
+		{`数列[2:]`, false, true},
+		{`数列[:3]`, true, false},
+		{`数列[:]`, true, true},
+	}
+	for _, c := range cases {
+		prog := mustParse(t, c.src)
+		expr := prog.Statements[0].(*ast.ExpressionStmt).Expression
+		sl, ok := expr.(*ast.SliceExpr)
+		if !ok {
+			t.Fatalf("%s 期望 SliceExpr，得到 %T", c.src, expr)
+		}
+		if (sl.Low == nil) != c.lowNil {
+			t.Errorf("%s Low 省略状态错误", c.src)
+		}
+		if (sl.High == nil) != c.highNil {
+			t.Errorf("%s High 省略状态错误", c.src)
+		}
+	}
+}
+
+func TestSpreadAST(t *testing.T) {
+	prog := mustParse(t, `[...前, 1, ...后]`)
+	lit := prog.Statements[0].(*ast.ExpressionStmt).Expression.(*ast.ArrayLiteral)
+	if len(lit.Elements) != 3 {
+		t.Fatalf("应有 3 个元素，得到 %d", len(lit.Elements))
+	}
+	if _, ok := lit.Elements[0].(*ast.SpreadExpr); !ok {
+		t.Fatalf("第一个元素应为 SpreadExpr，得到 %T", lit.Elements[0])
+	}
+	if _, ok := lit.Elements[2].(*ast.SpreadExpr); !ok {
+		t.Fatalf("第三个元素应为 SpreadExpr，得到 %T", lit.Elements[2])
+	}
+}
+
+func TestDictSpreadAST(t *testing.T) {
+	prog := mustParse(t, `{...d, "a": 1}`)
+	lit := prog.Statements[0].(*ast.ExpressionStmt).Expression.(*ast.DictLiteral)
+	if len(lit.Pairs) != 2 || !lit.Pairs[0].Spread {
+		t.Fatalf("字典展开解析错误：%+v", lit.Pairs)
+	}
+}
+
 func TestParenthesesAcrossLines(t *testing.T) {
 	prog := mustParse(t, "(1 +\n 2)")
 	if len(prog.Statements) != 1 {

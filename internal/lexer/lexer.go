@@ -101,6 +101,9 @@ func (l *Lexer) readOperator() token.Token {
 	case '？', '?':
 		return l.emitAndAdvance(token.QUEST, string(r))
 	case '.':
+		if l.peek(1) == '.' && l.peek(2) == '.' {
+			return l.emitAndAdvanceN(token.ELLIPSIS, "...", 3)
+		}
 		return l.emitAndAdvance(token.DOT, ".")
 	case ':':
 		return l.emitAndAdvance(token.COLON, ":")

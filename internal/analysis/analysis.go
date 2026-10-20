@@ -359,13 +359,25 @@ func childrenOf(node ast.Node) []ast.Node {
 	case *ast.IndexExpr:
 		addExpr(n.Target)
 		addExpr(n.Index)
+	case *ast.SliceExpr:
+		addExpr(n.Target)
+		if n.Low != nil {
+			addExpr(n.Low)
+		}
+		if n.High != nil {
+			addExpr(n.High)
+		}
+	case *ast.SpreadExpr:
+		addExpr(n.Value)
 	case *ast.ArrayLiteral:
 		for _, e := range n.Elements {
 			addExpr(e)
 		}
 	case *ast.DictLiteral:
 		for _, pair := range n.Pairs {
-			addExpr(pair.Key)
+			if pair.Key != nil {
+				addExpr(pair.Key)
+			}
 			addExpr(pair.Value)
 		}
 	case *ast.InterpString:

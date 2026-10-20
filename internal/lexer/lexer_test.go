@@ -174,6 +174,18 @@ func TestStringDollarEscapedAndLiteral(t *testing.T) {
 	})
 }
 
+func TestEllipsisAndDots(t *testing.T) {
+	expect(t, "... a.b ...x", []token.Token{
+		{Type: token.ELLIPSIS, Literal: "..."},
+		{Type: token.IDENT, Literal: "a"},
+		{Type: token.DOT, Literal: "."},
+		{Type: token.IDENT, Literal: "b"},
+		{Type: token.ELLIPSIS, Literal: "..."},
+		{Type: token.IDENT, Literal: "x"},
+		{Type: token.EOF, Literal: ""},
+	})
+}
+
 func TestHashComment(t *testing.T) {
 	expect(t, "# 这是注释\n年龄 = 18 # 行尾", []token.Token{
 		{Type: token.NEWLINE, Literal: "\n"},

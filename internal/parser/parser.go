@@ -816,10 +816,53 @@ func (p *Parser) parsePostfix(left ast.Expression) ast.Expression {
 			pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
 			p.parenDepth++
 			p.next()
+			// 切片：目标[低:高]，低/高可省略；冒号紧跟在 ] 前。
+			if p.cur.Type == token.COLON {
+				colonPos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+				p.next()
+				var high ast.Expression
+				if p.cur.Type != token.RBRACK {
+					high = p.parseExpression(LOWEST)
+					if high == nil {
+						p.parenDepth--
+						return nil
+					}
+				}
+				if p.cur.Type != token.RBRACK {
+					p.addError(p.cur, "切片缺少右方括号 ]")
+					p.parenDepth--
+					return nil
+				}
+				p.parenDepth--
+				p.next()
+				left = &ast.SliceExpr{Position: pos, Target: left, High: high, ColonPos: colonPos}
+				continue
+			}
 			idx := p.parseExpression(LOWEST)
 			if idx == nil {
 				p.parenDepth--
 				return nil
+			}
+			if p.cur.Type == token.COLON {
+				colonPos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+				p.next()
+				var high ast.Expression
+				if p.cur.Type != token.RBRACK {
+					high = p.parseExpression(LOWEST)
+					if high == nil {
+						p.parenDepth--
+						return nil
+					}
+				}
+				if p.cur.Type != token.RBRACK {
+					p.addError(p.cur, "切片缺少右方括号 ]")
+					p.parenDepth--
+					return nil
+				}
+				p.parenDepth--
+				p.next()
+				left = &ast.SliceExpr{Position: pos, Target: left, Low: idx, High: high, ColonPos: colonPos}
+				continue
 			}
 			if p.cur.Type != token.RBRACK {
 				p.addError(p.cur, "缺少右方括号 ]")
@@ -1005,6 +1048,27 @@ func (p *Parser) parseDictLiteral() ast.Expression {
 			p.parenDepth--
 			p.next()
 			return &ast.DictLiteral{Position: pos, Pairs: pairs}
+		}
+		if p.cur.Type == token.ELLIPSIS {
+			p.next()
+			value := p.parseExpression(LOWEST)
+			if value == nil {
+				p.parenDepth--
+				return nil
+			}
+			pairs = append(pairs, ast.DictPair{Value: value, Spread: true})
+			if p.cur.Type == token.COMMA {
+				p.next()
+				continue
+			}
+			if p.cur.Type == token.RBRACE {
+				p.parenDepth--
+				p.next()
+				return &ast.DictLiteral{Position: pos, Pairs: pairs}
+			}
+			p.addError(p.cur, "字典项应以 , 分隔或以 } 结束")
+			p.parenDepth--
+			return nil
 		}
 		key := p.parseExpression(LOWEST)
 		if key == nil {
@@ -1216,6 +1280,15 @@ func (p *Parser) parsePrefix() ast.Expression {
 		return &ast.UnaryExpr{Position: pos, Op: op, Right: right}
 	case token.LBRACK:
 		return p.parseArrayLiteral()
+	case token.ELLIPSIS:
+		pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
+		p.next()
+		value := p.parseExpression(PREC_PREFIX)
+		if value == nil {
+			p.addError(p.cur, "展开 ... 后应为数组或字典表达式")
+			return nil
+		}
+		return &ast.SpreadExpr{Position: pos, Value: value}
 	case token.LBRACE:
 		return p.parseDictLiteral()
 	case token.FUNCTION:
@@ -1977,10 +2050,8 @@ func (p *Parser) parseParamList() ([]ast.Parameter, bool) {
 		name := p.cur.Literal
 		p.next()
 		variadic := false
-		if p.cur.Type == token.DOT && p.peek.Type == token.DOT && p.peek2.Type == token.DOT {
+		if p.cur.Type == token.ELLIPSIS {
 			variadic = true
-			p.next()
-			p.next()
 			p.next()
 		}
 		dt := ast.TypeAny

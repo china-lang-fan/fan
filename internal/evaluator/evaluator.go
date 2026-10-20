@@ -61,6 +61,10 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return evalDictLiteral(n, env)
 	case *ast.IndexExpr:
 		return evalIndexExpr(n, env)
+	case *ast.SliceExpr:
+		return evalSlice(n, env)
+	case *ast.SpreadExpr:
+		return evalSpread(n, env, "表达式")
 	case *ast.IndexAssignStmt:
 		return evalIndexAssign(n, env)
 	case *ast.CallExpr:
@@ -877,6 +881,7 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 		args = append(args, v)
 	}
 	args = spreadTuples(args)
+	args = flattenSpreadMarkers(args)
 	if named, ok := obj.(*object.Named); ok {
 		if namedType, exists := env.Runtime().namedTypes[named.TypeName]; exists {
 			if fn := namedType.lookupMethod(member.Name); fn != nil {

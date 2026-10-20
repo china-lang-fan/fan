@@ -130,6 +130,7 @@ func evalImplicitReceiverCallExpr(node *ast.ImplicitReceiverCallExpr, env *Envir
 		args = append(args, arg)
 	}
 	args = spreadTuples(args)
+	args = flattenSpreadMarkers(args)
 	member := &ast.MemberExpr{Position: node.Position, Object: node.Receiver, Name: node.Name}
 	if fn, err := resolveMemberFunction(receiver, member, env); err == nil {
 		return callResolvedMemberFunction(env.Runtime(), fn, receiver, args, node.Position)

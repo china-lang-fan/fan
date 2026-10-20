@@ -164,6 +164,7 @@ func evalCallExpr(node *ast.CallExpr, env *Environment) (object.Object, error) {
 		args = append(args, val)
 	}
 	args = spreadTuples(args)
+	args = flattenSpreadMarkers(args)
 	if value, handled, err := runtimeBuiltin(env.Runtime(), ident.Name, node.Position, args); handled {
 		return value, err
 	}

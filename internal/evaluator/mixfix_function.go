@@ -176,7 +176,7 @@ func evalMixfixCall(chain *mixfixCallChain, env *Environment, pos ast.Position) 
 			}
 			groupValues = append(groupValues, value)
 		}
-		values = append(values, spreadTuples(groupValues)...)
+		values = append(values, flattenSpreadMarkers(spreadTuples(groupValues))...)
 	}
 	signature := buildRuntimeMixfixSignature(chain.segments, chain.connectors, chain.groupSize, values)
 	var fn *Function

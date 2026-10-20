@@ -32,6 +32,38 @@ func (n *IndexExpr) String() string {
 	return fmt.Sprintf("%s[%s]", n.Target.String(), n.Index.String())
 }
 
+// SliceExpr 表示切片表达式 目标[低:高]，Low/High 为 nil 表示该侧省略。
+type SliceExpr struct {
+	Position Position
+	Target   Expression
+	Low      Expression
+	High     Expression
+	ColonPos Position
+}
+
+func (n *SliceExpr) Pos() Position   { return n.Position }
+func (n *SliceExpr) expressionNode() {}
+func (n *SliceExpr) String() string {
+	low, high := "", ""
+	if n.Low != nil {
+		low = n.Low.String()
+	}
+	if n.High != nil {
+		high = n.High.String()
+	}
+	return fmt.Sprintf("%s[%s:%s]", n.Target.String(), low, high)
+}
+
+// SpreadExpr 表示展开表达式 ...值，用于数组字面量、调用实参与字典字面量。
+type SpreadExpr struct {
+	Position Position
+	Value    Expression
+}
+
+func (n *SpreadExpr) Pos() Position   { return n.Position }
+func (n *SpreadExpr) expressionNode() {}
+func (n *SpreadExpr) String() string  { return "..." + n.Value.String() }
+
 type CallExpr struct {
 	Position Position
 	Callee   Expression
@@ -62,8 +94,9 @@ func (n *IndexAssignStmt) String() string {
 }
 
 type DictPair struct {
-	Key   Expression
-	Value Expression
+	Key    Expression
+	Value  Expression
+	Spread bool // {...d} 字典展开时为 true，此时仅 Value 有效
 }
 
 type DictLiteral struct {
@@ -76,6 +109,10 @@ func (n *DictLiteral) expressionNode() {}
 func (n *DictLiteral) String() string {
 	parts := make([]string, 0, len(n.Pairs))
 	for _, p := range n.Pairs {
+		if p.Spread {
+			parts = append(parts, "..."+p.Value.String())
+			continue
+		}
 		parts = append(parts, p.Key.String()+": "+p.Value.String())
 	}
 	return "{" + strings.Join(parts, ", ") + "}"

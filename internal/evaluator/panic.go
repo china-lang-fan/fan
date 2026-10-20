@@ -72,7 +72,7 @@ func prepareDeferredValueCall(rt *Runtime, node *ast.CallExpr, env *Environment)
 				}
 				args = append(args, value)
 			}
-			return deferredCall{builtin: fn, args: spreadTuples(args), pos: node.Position}, nil
+			return deferredCall{builtin: fn, args: flattenSpreadMarkers(spreadTuples(args)), pos: node.Position}, nil
 		}
 		value, ok := env.get(callee.Name)
 		if !ok {
@@ -103,7 +103,7 @@ func prepareDeferredValueCall(rt *Runtime, node *ast.CallExpr, env *Environment)
 		}
 		args = append(args, value)
 	}
-	return deferredCall{callable: callable, args: spreadTuples(args), pos: node.Position}, nil
+	return deferredCall{callable: callable, args: flattenSpreadMarkers(spreadTuples(args)), pos: node.Position}, nil
 }
 
 func evalThrowStmt(stmt *ast.ThrowStmt, env *Environment) (object.Object, error) {
