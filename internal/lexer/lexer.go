@@ -251,6 +251,34 @@ func (l *Lexer) emitAndAdvanceN(t token.Type, literal string, n int) token.Token
 func (l *Lexer) readNumber() token.Token {
 	start := l.pos
 	startCol := l.col
+	// 二进制、八进制、十六进制前缀：0b/0B、0o/0O、0x/0X。
+	if l.src[l.pos] == '0' && l.pos+1 < len(l.src) {
+		var valid func(rune) bool
+		var baseName string
+		switch l.src[l.pos+1] {
+		case 'b', 'B':
+			valid = isBinaryDigit
+			baseName = "二进制"
+		case 'o', 'O':
+			valid = isOctalDigit
+			baseName = "八进制"
+		case 'x', 'X':
+			valid = isHexDigit
+			baseName = "十六进制"
+		}
+		if valid != nil {
+			l.advance()
+			l.advance()
+			digitStart := l.pos
+			for l.pos < len(l.src) && valid(l.src[l.pos]) {
+				l.advance()
+			}
+			if l.pos == digitStart || (l.pos < len(l.src) && isIdentPart(l.src[l.pos])) {
+				return token.Token{Type: token.ILLEGAL, Literal: baseName + "整数格式错误", Line: l.line, Column: startCol}
+			}
+			return token.Token{Type: token.INT, Literal: string(l.src[start:l.pos]), Line: l.line, Column: startCol}
+		}
+	}
 	for l.pos < len(l.src) && isDigit(l.src[l.pos]) {
 		l.advance()
 	}
@@ -268,6 +296,12 @@ func (l *Lexer) readNumber() token.Token {
 		t = token.FLOAT
 	}
 	return token.Token{Type: t, Literal: literal, Line: l.line, Column: startCol}
+}
+
+func isBinaryDigit(r rune) bool { return r == '0' || r == '1' }
+func isOctalDigit(r rune) bool  { return r >= '0' && r <= '7' }
+func isHexDigit(r rune) bool {
+	return isDigit(r) || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 }
 
 func (l *Lexer) readString() token.Token {

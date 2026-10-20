@@ -1174,9 +1174,17 @@ func (p *Parser) parsePrefix() ast.Expression {
 	pos := ast.Position{Line: p.cur.Line, Column: p.cur.Column}
 	switch p.cur.Type {
 	case token.INT:
-		v, err := strconv.ParseInt(p.cur.Literal, 10, 64)
+		base := 10
+		lit := p.cur.Literal
+		if len(lit) >= 2 && lit[0] == '0' {
+			switch lit[1] {
+			case 'b', 'B', 'o', 'O', 'x', 'X':
+				base = 0 // strconv 的 base 0 自动识别 0b/0o/0x 前缀
+			}
+		}
+		v, err := strconv.ParseInt(lit, base, 64)
 		if err != nil {
-			p.addError(p.cur, "整数超出范围：%s", p.cur.Literal)
+			p.addError(p.cur, "整数超出范围或格式错误：%s", lit)
 			return nil
 		}
 		node := &ast.IntegerLiteral{Position: pos, Value: v}

@@ -174,6 +174,27 @@ func TestStringDollarEscapedAndLiteral(t *testing.T) {
 	})
 }
 
+func TestNonDecimalIntegers(t *testing.T) {
+	expect(t, "0b1010 0o17 0xFF 0B1 0O7 0X10", []token.Token{
+		{Type: token.INT, Literal: "0b1010"},
+		{Type: token.INT, Literal: "0o17"},
+		{Type: token.INT, Literal: "0xFF"},
+		{Type: token.INT, Literal: "0B1"},
+		{Type: token.INT, Literal: "0O7"},
+		{Type: token.INT, Literal: "0X10"},
+		{Type: token.EOF, Literal: ""},
+	})
+}
+
+func TestNonDecimalIntegerErrors(t *testing.T) {
+	for _, src := range []string{"0b", "0x", "0o9", "0b102", "0xGG"} {
+		toks := collect(t, src)
+		if toks[0].Type != token.ILLEGAL {
+			t.Errorf("%s 应产生 ILLEGAL token，实际 %v", src, toks[0])
+		}
+	}
+}
+
 func TestEllipsisAndDots(t *testing.T) {
 	expect(t, "... a.b ...x", []token.Token{
 		{Type: token.ELLIPSIS, Literal: "..."},
