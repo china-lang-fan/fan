@@ -2,10 +2,40 @@ package evaluator
 
 import (
 	"fmt"
+	"strings"
 
 	"fan/internal/ast"
 	"fan/internal/object"
 )
+
+// formatDeclType 将内部联合类型表示（| 连接）转为可读形式（或 连接）。
+func formatDeclType(dt ast.DeclType) string {
+	if !strings.Contains(string(dt), "|") {
+		return string(dt)
+	}
+	return strings.Join(strings.Split(string(dt), "|"), " 或 ")
+}
+
+func checkDeclType(dt ast.DeclType, val object.Object, env *Environment) error {
+	if dt == ast.TypeAny {
+		return nil
+	}
+	if strings.Contains(string(dt), "|") {
+		for _, member := range strings.Split(string(dt), "|") {
+			if member == "空" {
+				if val.Kind() == object.KindNil {
+					return nil
+				}
+				continue
+			}
+			if err := checkSingleDeclType(ast.DeclType(member), val, env); err == nil {
+				return nil
+			}
+		}
+		return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s", formatDeclType(dt), val.Kind())
+	}
+	return checkSingleDeclType(dt, val, env)
+}
 
 type binding struct {
 	value      object.Object
@@ -221,9 +251,12 @@ func coerceDeclType(dt ast.DeclType, val object.Object, env *Environment) (objec
 	return val, nil
 }
 
-func checkDeclType(dt ast.DeclType, val object.Object, env *Environment) error {
-	if dt == ast.TypeAny {
-		return nil
+func checkSingleDeclType(dt ast.DeclType, val object.Object, env *Environment) error {
+	if dt == "空" {
+		if val.Kind() == object.KindNil {
+			return nil
+		}
+		return fmt.Errorf("类型不匹配：声明为 空，实际为 %s", val.Kind())
 	}
 	want := object.Kind("")
 	switch dt {

@@ -475,49 +475,15 @@ func (p *Parser) parseVarDecl() ast.Statement {
 		isConst = true
 		p.next()
 	}
-	switch p.cur.Type {
-	case token.TYPE_INT:
+	// 类型标注：变量 [类型(|类型)] 名字 = …，支持基本类型、模型/接口名与联合类型。
+	if isTypeToken(p.cur.Type) {
 		sawKeyword = true
-		declType = ast.TypeInt
-		p.next()
-	case token.TYPE_FLOAT:
+		declType = p.parseTypeUnion()
+	} else if (p.cur.Type == token.CLASS || p.cur.Type == token.IDENT) &&
+		(p.peek.Type == token.IDENT || isUnionSepToken(p.peek.Type)) {
+		// 自定义类型标注：类型名 后接变量名，或后接 或/| 构成联合类型
 		sawKeyword = true
-		declType = ast.TypeFloat
-		p.next()
-	case token.TYPE_STRING:
-		sawKeyword = true
-		declType = ast.TypeString
-		p.next()
-	case token.TYPE_BOOL:
-		sawKeyword = true
-		declType = ast.TypeBool
-		p.next()
-	case token.TYPE_ARRAY:
-		sawKeyword = true
-		declType = ast.TypeArray
-		p.next()
-	case token.TYPE_DICT:
-		sawKeyword = true
-		declType = ast.TypeDict
-		p.next()
-	case token.TYPE_ERROR:
-		sawKeyword = true
-		declType = ast.TypeError
-		p.next()
-	case token.TYPE_BYTE:
-		sawKeyword = true
-		declType = ast.TypeByte
-		p.next()
-	case token.TYPE_CHAR:
-		sawKeyword = true
-		declType = ast.TypeChar
-		p.next()
-	}
-
-	// 具名类型标注：变量 说话者 阿黄 = ...（模型或接口名）
-	if sawKeyword && p.cur.Type == token.IDENT && p.peek.Type == token.IDENT {
-		declType = ast.DeclType(p.cur.Literal)
-		p.next()
+		declType = p.parseTypeUnion()
 	}
 
 	if p.cur.Type != token.IDENT {
@@ -1990,13 +1956,12 @@ func (p *Parser) parseReturnTypes() ([]ast.DeclType, bool) {
 				p.next()
 				return types, true
 			}
-			if !isTypeToken(p.cur.Type) && p.cur.Type != token.CLASS && p.cur.Type != token.IDENT {
+			if !isTypePositionToken(p.cur.Type) {
 				p.addError(p.cur, "括号内应为返回类型")
 				p.parenDepth--
 				return nil, false
 			}
-			types = append(types, ast.DeclType(p.cur.Literal))
-			p.next()
+			types = append(types, p.parseTypeUnion())
 			if p.cur.Type == token.COMMA {
 				p.next()
 				continue
@@ -2011,12 +1976,11 @@ func (p *Parser) parseReturnTypes() ([]ast.DeclType, bool) {
 			return nil, false
 		}
 	}
-	if !isTypeToken(p.cur.Type) && p.cur.Type != token.CLASS && p.cur.Type != token.IDENT {
+	if !isTypePositionToken(p.cur.Type) {
 		p.addError(p.cur, "-> 后应为返回类型")
 		return nil, false
 	}
-	types := []ast.DeclType{ast.DeclType(p.cur.Literal)}
-	p.next()
+	types := []ast.DeclType{p.parseTypeUnion()}
 	return types, true
 }
 
@@ -2063,20 +2027,8 @@ func (p *Parser) parseParamList() ([]ast.Parameter, bool) {
 			p.next()
 		}
 		dt := ast.TypeAny
-		if variadic {
-			if isTypeToken(p.cur.Type) {
-				dt = parseDeclType(p.cur.Type)
-				p.next()
-			} else if p.cur.Type == token.CLASS {
-				dt = ast.DeclType(p.cur.Literal)
-				p.next()
-			}
-		} else if isTypeToken(p.cur.Type) {
-			dt = parseDeclType(p.cur.Type)
-			p.next()
-		} else if p.cur.Type == token.CLASS || p.cur.Type == token.IDENT {
-			dt = ast.DeclType(p.cur.Literal)
-			p.next()
+		if isTypePositionToken(p.cur.Type) {
+			dt = p.parseTypeUnion()
 		}
 		var def ast.Expression
 		if !variadic && p.cur.Type == token.ASSIGN {
@@ -2224,8 +2176,12 @@ func (p *Parser) parseClassStatement() ast.Statement {
 			p.next()
 			dt := ast.TypeAny
 			if isTypeToken(p.cur.Type) {
-				dt = parseDeclType(p.cur.Type)
-				p.next()
+				dt = p.parseTypeUnion()
+			} else if p.cur.Type == token.CLASS || p.cur.Type == token.IDENT {
+				// 自定义类型字段：类型名后应跟字段名，或紧跟 或/| 构成联合类型
+				if p.peek.Type == token.IDENT || isUnionSepToken(p.peek.Type) {
+					dt = p.parseTypeUnion()
+				}
 			}
 			if p.cur.Type != token.IDENT {
 				p.addError(p.cur, "字段名应为标识符")
@@ -2484,6 +2440,51 @@ func isTypeToken(t token.Type) bool {
 		t == token.TYPE_STRING || t == token.TYPE_BOOL ||
 		t == token.TYPE_ARRAY || t == token.TYPE_DICT ||
 		t == token.TYPE_ERROR || t == token.TYPE_BYTE || t == token.TYPE_CHAR
+}
+
+// isTypePositionToken 判断当前 token 能否作为类型位置上的一个类型名。
+func isTypePositionToken(t token.Type) bool {
+	return isTypeToken(t) || t == token.CLASS || t == token.IDENT || t == token.NIL
+}
+
+func isUnionSepToken(t token.Type) bool {
+	return t == token.OR || t == token.BOR
+}
+
+// parseSingleTypeName 读取并消费一个类型名（基本类型、模型/接口/命名类型或 空）。
+func (p *Parser) parseSingleTypeName() ast.DeclType {
+	switch {
+	case isTypeToken(p.cur.Type):
+		dt := parseDeclType(p.cur.Type)
+		p.next()
+		return dt
+	case p.cur.Type == token.NIL:
+		p.next()
+		return ast.DeclType("空")
+	case p.cur.Type == token.CLASS || p.cur.Type == token.IDENT:
+		name := ast.DeclType(p.cur.Literal)
+		p.next()
+		return name
+	}
+	return ast.TypeAny
+}
+
+// parseTypeUnion 在类型位置读取 “类型 (或/| 类型)*”，内部用 | 连接。
+func (p *Parser) parseTypeUnion() ast.DeclType {
+	first := p.parseSingleTypeName()
+	if first == ast.TypeAny {
+		return ast.TypeAny
+	}
+	parts := []string{string(first)}
+	for isUnionSepToken(p.cur.Type) {
+		p.next()
+		if !isTypePositionToken(p.cur.Type) {
+			p.addError(p.cur, "联合类型 或 后应为类型名")
+			return ast.DeclType(strings.Join(parts, "|"))
+		}
+		parts = append(parts, string(p.parseSingleTypeName()))
+	}
+	return ast.DeclType(strings.Join(parts, "|"))
 }
 
 // isFunctionNameToken 允许类型名（错误/字节/字符）作为函数名使用，
