@@ -188,6 +188,10 @@ func (p *Parser) parseStatement() ast.Statement {
 	case p.cur.Type == token.DEFINE:
 		p.next()
 		switch {
+		case p.cur.Type == token.PUBLIC:
+			return p.parseVisibilityStatement(ast.VisPublic)
+		case p.cur.Type == token.PRIVATE:
+			return p.parseVisibilityStatement(ast.VisPrivate)
 		case p.cur.Type == token.FUNCTION:
 			return p.parseFunctionStatement()
 		case p.cur.Type == token.CLASS:
@@ -1312,7 +1316,7 @@ func (p *Parser) parseInfix(left ast.Expression) ast.Expression {
 	pr := p.currentPrecedence()
 	p.next()
 	if op.Type == token.IS || op.Type == token.AS {
-		if p.cur.Type != token.IDENT && !isTypeToken(p.cur.Type) {
+		if !isTypePositionToken(p.cur.Type) {
 			p.addError(p.cur, "%s 后面应为类型名", op.Literal)
 			return nil
 		}
@@ -2229,12 +2233,14 @@ func (p *Parser) parseTypeDefStatement() ast.Statement {
 	}
 	name := p.cur.Literal
 	p.next()
-	if !isTypeToken(p.cur.Type) {
-		p.addError(p.cur, "类型 %s 需要一个底层基本类型，实际：%q", name, p.cur.Literal)
+	if p.cur.Type == token.ASSIGN {
+		p.next()
+	}
+	if !isTypePositionToken(p.cur.Type) {
+		p.addError(p.cur, "类型 %s 需要底层类型（基本类型、模型/接口名或其联合），实际：%q", name, p.cur.Literal)
 		return nil
 	}
-	baseType := parseDeclType(p.cur.Type)
-	p.next()
+	baseType := p.parseTypeUnion()
 	if p.cur.Type != token.NEWLINE && p.cur.Type != token.EOF {
 		p.addError(p.cur, "类型声明后应换行，实际：%q", p.cur.Type)
 		return nil

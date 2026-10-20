@@ -218,7 +218,7 @@ func (d *Document) collectStatement(stmt ast.Statement, owner string) {
 		sym := &Symbol{
 			Name: s.Name, Kind: KindType, Pos: s.Position,
 			EndPos: endOf(d.lines, s.Position),
-			Detail: string(s.BaseType),
+			Detail: formatTypeDetail(string(s.BaseType)),
 			Doc:    d.docBefore(s.Position.Line),
 		}
 		d.add(sym)
@@ -381,4 +381,12 @@ func docCommentText(trimmed string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// formatTypeDetail 将内部联合类型表示（| 连接）转为可读形式（或 连接）。
+func formatTypeDetail(t string) string {
+	if !strings.Contains(t, "|") {
+		return t
+	}
+	return strings.Join(strings.Split(t, "|"), " 或 ")
 }

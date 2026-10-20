@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"strings"
 
 	"fan/internal/ast"
 	"fan/internal/object"
@@ -14,6 +15,7 @@ const KindNamedType object.Kind = "自定义类型"
 type NamedType struct {
 	Name     string
 	BaseType ast.DeclType
+	IsUnion  bool
 	Methods  map[string]*Function
 }
 
@@ -26,11 +28,13 @@ func (t *NamedType) lookupMethod(name string) *Function {
 
 func evalTypeDefStmt(stmt *ast.TypeDefStmt, env *Environment) (object.Object, error) {
 	rt := env.Runtime()
-	named := &NamedType{Name: stmt.Name, BaseType: stmt.BaseType, Methods: map[string]*Function{}}
+	isUnion := strings.Contains(string(stmt.BaseType), "|")
+	named := &NamedType{Name: stmt.Name, BaseType: stmt.BaseType, IsUnion: isUnion, Methods: map[string]*Function{}}
 	rt.namedTypes[stmt.Name] = named
 	if existing, ok := env.get(stmt.Name); ok {
 		if old, ok := existing.(*NamedType); ok {
 			old.BaseType = stmt.BaseType
+			old.IsUnion = isUnion
 			if old.Methods == nil {
 				old.Methods = map[string]*Function{}
 			}
@@ -43,8 +47,12 @@ func evalTypeDefStmt(stmt *ast.TypeDefStmt, env *Environment) (object.Object, er
 	return named, nil
 }
 
-// convertToNamed 把值按底层类型收窄并包装为自定义类型值。
+// convertToNamed 把值收窄并包装为自定义类型值。
+// 联合命名类型：值满足任一成员即通过；字节成员按 0–255 收窄。
 func convertToNamed(t *NamedType, value object.Object, pos ast.Position) (object.Object, error) {
+	if t.IsUnion {
+		return convertToUnionNamed(t, value, pos)
+	}
 	if named, ok := value.(*object.Named); ok {
 		value = named.Value
 	}
@@ -53,6 +61,48 @@ func convertToNamed(t *NamedType, value object.Object, pos ast.Position) (object
 		return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("无法转换为 %s：%s", t.Name, err.Error())}
 	}
 	return &object.Named{TypeName: t.Name, Value: converted}, nil
+}
+
+// convertToUnionNamed 校验值是否满足联合命名类型，并包装为该命名类型值。
+func convertToUnionNamed(t *NamedType, value object.Object, pos ast.Position) (object.Object, error) {
+	inner := value
+	if named, ok := value.(*object.Named); ok {
+		inner = named.Value
+	}
+	if member, ok := unionMatchMember(t.BaseType, inner, nil); ok {
+		var converted object.Object = inner
+		if member == ast.TypeByte {
+			if b, ok := inner.(*object.Byte); ok {
+				converted = b
+			} else if n, ok := inner.(*object.Integer); ok && n.Value >= 0 && n.Value <= 255 {
+				converted = &object.Byte{Value: byte(n.Value)}
+			}
+		}
+		return &object.Named{TypeName: t.Name, Value: converted}, nil
+	}
+	return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("无法转换为 %s：类型不匹配（%s），实际为 %s", t.Name, formatDeclType(t.BaseType), value.Kind())}
+}
+
+// unionMatchMember 返回值满足的第一个联合成员名；env 非空时支持接口成员。
+func unionMatchMember(dt ast.DeclType, value object.Object, env *Environment) (ast.DeclType, bool) {
+	if !strings.Contains(string(dt), "|") {
+		if checkSingleDeclType(dt, value, env) == nil {
+			return dt, true
+		}
+		return "", false
+	}
+	for _, member := range strings.Split(string(dt), "|") {
+		if member == "空" {
+			if value.Kind() == object.KindNil {
+				return ast.DeclType(member), true
+			}
+			continue
+		}
+		if checkSingleDeclType(ast.DeclType(member), value, env) == nil {
+			return ast.DeclType(member), true
+		}
+	}
+	return "", false
 }
 
 // coerceToPrimitiveKind 按声明的基本类型收窄值；字节允许 0–255 整数自动转换。

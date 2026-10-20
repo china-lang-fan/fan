@@ -1,6 +1,8 @@
 package evaluator
 
 import (
+	"strings"
+
 	"fan/internal/ast"
 	"fan/internal/object"
 )
@@ -66,6 +68,18 @@ func unwrapCheckSignal(err error) (*object.Error, bool) {
 func zeroValueForType(dt ast.DeclType, env *Environment) object.Object {
 	if env != nil {
 		if namedType, ok := env.Runtime().namedTypes[string(dt)]; ok {
+			if namedType.IsUnion {
+				members := []ast.DeclType{}
+				for _, m := range strings.Split(string(namedType.BaseType), "|") {
+					members = append(members, ast.DeclType(m))
+				}
+				first := members[0]
+				if first == "空" {
+					return object.Null
+				}
+				base := zeroValueForType(first, env)
+				return &object.Named{TypeName: namedType.Name, Value: base}
+			}
 			base := zeroValueForType(namedType.BaseType, nil)
 			return &object.Named{TypeName: namedType.Name, Value: base}
 		}

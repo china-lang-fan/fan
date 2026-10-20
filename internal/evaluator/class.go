@@ -476,6 +476,10 @@ func evalFieldAccess(node *ast.MemberExpr, env *Environment, obj object.Object) 
 			if fn := namedType.lookupMethod(node.Name); fn != nil {
 				return fn, nil
 			}
+			// 联合命名类型：委托给内部值的字段/方法。
+			if namedType.IsUnion {
+				return evalFieldAccess(node, env, target.Value)
+			}
 		}
 		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有成员 %s", target.TypeName, node.Name)}
 	case *runtimeTagContext:

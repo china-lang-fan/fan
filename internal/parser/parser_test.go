@@ -270,3 +270,68 @@ func TestParenthesesAcrossLines(t *testing.T) {
 		t.Fatalf("括号内折行应合法，实际语句数 %d", len(prog.Statements))
 	}
 }
+
+func TestTypeDefForms(t *testing.T) {
+	cases := []struct {
+		src  string
+		base ast.DeclType
+	}{
+		{`类型 状态 整数`, ast.TypeInt},
+		{`定义 类型 状态 = 整数`, ast.TypeInt},
+		{`定义 类型 编号 为 整数 或 字符串`, ast.DeclType("整数|字符串")},
+		{`定义 类型 编号 = 整数 | 字符串`, ast.DeclType("整数|字符串")},
+	}
+	for _, c := range cases {
+		prog := mustParse(t, c.src)
+		if len(prog.Statements) != 1 {
+			t.Fatalf("应为 1 条语句：%q", c.src)
+		}
+		td, ok := prog.Statements[0].(*ast.TypeDefStmt)
+		if !ok {
+			t.Fatalf("应为类型声明：%q", c.src)
+		}
+		if td.Name != "状态" && c.src != `类型 状态 整数` {
+			if td.Name != "编号" {
+				t.Errorf("%s 类型名应为 编号，实际 %s", c.src, td.Name)
+			}
+		}
+		if td.BaseType != c.base {
+			t.Errorf("%s 底层类型应为 %s，实际 %s", c.src, c.base, td.BaseType)
+		}
+	}
+	expectError(t, `定义 类型 编号 为`)
+	expectError(t, `定义 类型 编号 为 真`)
+}
+
+func TestDefineFirstForms(t *testing.T) {
+	cases := []string{
+		`定义 变量 x = 1`,
+		`定义 常量 y = 2`,
+		`定义 函数 f() -> 整数
+返回 1
+结束`,
+		`定义 模型 M
+变量 整数 a
+结束`,
+		`定义 接口 I
+方法 f() -> 整数
+结束`,
+		`定义 类型 T 为 整数`,
+		`定义 公开 函数 g() -> 整数
+返回 1
+结束`,
+		`定义 公开 模型 N
+变量 整数 a
+结束`,
+		`定义 私有 类型 U = 整数 或 字符串`,
+		`公开 定义 函数 h() -> 整数
+返回 1
+结束`,
+	}
+	for _, src := range cases {
+		prog := mustParse(t, src)
+		if len(prog.Statements) != 1 {
+			t.Fatalf("应为 1 条语句：%q", src)
+		}
+	}
+}

@@ -882,42 +882,42 @@ func evalMethodCall(node *ast.CallExpr, member *ast.MemberExpr, env *Environment
 	}
 	args = spreadTuples(args)
 	args = flattenSpreadMarkers(args)
+	return evalMethodOnValue(obj, member, args, env, node.Position)
+}
+
+// evalMethodOnValue 在给定接收者上解析并调用方法。
+func evalMethodOnValue(obj object.Object, member *ast.MemberExpr, args []object.Object, env *Environment, pos ast.Position) (object.Object, error) {
 	if named, ok := obj.(*object.Named); ok {
 		if namedType, exists := env.Runtime().namedTypes[named.TypeName]; exists {
 			if fn := namedType.lookupMethod(member.Name); fn != nil {
-				return applyFunction(fn, append([]object.Object{named}, args...), node.Position)
+				return applyFunction(fn, append([]object.Object{named}, args...), pos)
+			}
+			// 联合命名类型：别名上无此方法时，委托给内部值（模型/接口/原生类型方法）。
+			if namedType.IsUnion {
+				obj = named.Value
 			}
 		}
 	}
 	if fn, ok := env.primitiveMethods().lookup(obj, member.Name); ok {
-		return applyFunction(fn, append([]object.Object{obj}, args...), node.Position)
+		return applyFunction(fn, append([]object.Object{obj}, args...), pos)
 	}
 	switch target := obj.(type) {
 	case *Instance:
 		fn, err := target.getMethod(member.Name, env)
 		if err != nil {
-			return nil, &EvalError{Pos: node.Position, Reason: err.Error()}
+			return nil, &EvalError{Pos: pos, Reason: err.Error()}
 		}
-		return applyFunction(fn, args, node.Position)
-	case *object.Named:
-		if namedType, ok := env.Runtime().namedTypes[target.TypeName]; ok {
-			fn := namedType.lookupMethod(member.Name)
-			if fn == nil {
-				return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有方法 %s", target.TypeName, member.Name)}
-			}
-			return applyFunction(fn, append([]object.Object{target}, args...), node.Position)
-		}
-		return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("%s 没有方法 %s", target.TypeName, member.Name)}
+		return applyFunction(fn, args, pos)
 	case *object.Array:
-		return evalArrayMethod(node.Position, target, member.Name, args)
+		return evalArrayMethod(pos, target, member.Name, args)
 	case *object.Module:
 		callee, ok := target.Exports[member.Name]
 		if !ok {
-			return nil, &EvalError{Pos: node.Position, Reason: fmt.Sprintf("模块 %s 没有公开成员 %s", target.Name, member.Name)}
+			return nil, &EvalError{Pos: pos, Reason: fmt.Sprintf("模块 %s 没有公开成员 %s", target.Name, member.Name)}
 		}
-		return callExported(env.Runtime(), callee, args, node.Position)
+		return callExported(env.Runtime(), callee, args, pos)
 	default:
-		return callDynamicMember(env.Runtime(), obj, member, args, node.Position)
+		return callDynamicMember(env.Runtime(), obj, member, args, pos)
 	}
 }
 

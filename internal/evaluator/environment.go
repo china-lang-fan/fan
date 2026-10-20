@@ -245,6 +245,21 @@ func coerceDeclType(dt ast.DeclType, val object.Object, env *Environment) (objec
 		}
 		return nil, fmt.Errorf("类型不匹配：声明为 字节，实际为 %s", val.Kind())
 	}
+	// 联合命名类型：满足任一成员即自动包装为该命名类型值。
+	if env != nil {
+		if namedType, ok := env.Runtime().namedTypes[string(dt)]; ok && namedType.IsUnion {
+			inner := unwrapNamed(val)
+			if member, ok := unionMatchMember(namedType.BaseType, inner, env); ok {
+				if member == ast.TypeByte {
+					if n, isInt := inner.(*object.Integer); isInt {
+						return &object.Named{TypeName: namedType.Name, Value: &object.Byte{Value: byte(n.Value)}}, nil
+					}
+				}
+				return &object.Named{TypeName: namedType.Name, Value: inner}, nil
+			}
+			return nil, fmt.Errorf("类型不匹配：声明为 %s（%s），实际为 %s", dt, formatDeclType(namedType.BaseType), val.Kind())
+		}
+	}
 	if err := checkDeclType(dt, val, env); err != nil {
 		return nil, err
 	}
@@ -306,8 +321,15 @@ func checkSingleDeclType(dt ast.DeclType, val object.Object, env *Environment) e
 		}
 		if env != nil {
 			rt := env.Runtime()
-			// 自定义命名类型：不允许隐式从底层类型赋值，需显式 类型名(值) 转换。
-			if _, isNamed := rt.namedTypes[string(dt)]; isNamed {
+			if namedType, isNamed := rt.namedTypes[string(dt)]; isNamed {
+				// 联合命名类型：包装身份一致，或内部值满足联合成员。
+				if namedType.IsUnion {
+					if _, ok := unionMatchMember(namedType.BaseType, unwrapNamed(val), env); ok {
+						return nil
+					}
+					return fmt.Errorf("类型不匹配：声明为 %s（%s），实际为 %s", dt, formatDeclType(namedType.BaseType), val.Kind())
+				}
+				// 普通命名类型：不允许隐式从底层类型赋值，需显式 类型名(值) 转换。
 				return fmt.Errorf("类型不匹配：声明为 %s，实际为 %s（需显式转换）", dt, val.Kind())
 			}
 			// 声明的类型名可能是接口：按方法集做结构化满足检查（含签名）。

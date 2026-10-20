@@ -178,6 +178,21 @@ func checkInterfaceSatisfied(iface *Interface, value object.Object, env *Environ
 		methods = classMethodSet(v.Class, map[string]bool{})
 	case *object.Named:
 		methods = namedMethodSet(v, env)
+		// 联合命名类型：合并内部值（模型/原生）的方法集。
+		if namedType, ok := env.Runtime().namedTypes[v.TypeName]; ok && namedType.IsUnion {
+			var inner map[string]methodInfo
+			switch innerVal := v.Value.(type) {
+			case *Instance:
+				inner = classMethodSet(innerVal.Class, map[string]bool{})
+			default:
+				inner = primitiveMethodSet(v.Value, env)
+			}
+			for name, info := range inner {
+				if _, exists := methods[name]; !exists {
+					methods[name] = info
+				}
+			}
+		}
 	default:
 		methods = primitiveMethodSet(value, env)
 	}
@@ -309,7 +324,14 @@ func valueIsType(value object.Object, typeName string, env *Environment) bool {
 			return true
 		}
 	}
-	if _, isNamed := env.Runtime().namedTypes[typeName]; isNamed {
+	if _, namedDecl := env.Runtime().namedTypes[typeName]; namedDecl {
+		if namedType, ok := env.Runtime().namedTypes[typeName]; ok && namedType.IsUnion {
+			if named, isNamedVal := value.(*object.Named); isNamedVal && named.TypeName == typeName {
+				return true
+			}
+			_, matched := unionMatchMember(namedType.BaseType, value, env)
+			return matched
+		}
 		return false
 	}
 	if inst, ok := value.(*Instance); ok {
@@ -318,6 +340,12 @@ func valueIsType(value object.Object, typeName string, env *Environment) bool {
 		}
 		if classHasEmbed(inst.Class, typeName, map[string]bool{}) {
 			return true
+		}
+	}
+	// 联合命名类型包装值：按内部值参与模型/接口判断。
+	if named, isNamedVal := value.(*object.Named); isNamedVal {
+		if namedType, ok := env.Runtime().namedTypes[named.TypeName]; ok && namedType.IsUnion {
+			return valueIsType(named.Value, typeName, env)
 		}
 	}
 	if iface, ok := env.Runtime().lookupInterface(typeName, env); ok {
