@@ -202,7 +202,6 @@ var keywords = map[string]Type{
 	"的":    MEMBER,
 	"方法":   METHOD,
 	"自己":   SELF,
-	"类":    CLASS,
 	"模型":   CLASS,
 	"接口":   INTERFACE,
 	"类型":   TYPEDEF,

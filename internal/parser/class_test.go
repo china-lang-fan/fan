@@ -119,3 +119,8 @@ func TestTypedField(t *testing.T) {
 		t.Fatalf("字段类型错误：%+v", cls.Fields)
 	}
 }
+
+func TestClassKeywordAliasRemoved(t *testing.T) {
+	expectError(t, "类 矩形\n    变量 整数 宽\n结束")
+	expectError(t, "定义 类 矩形\n    变量 整数 宽\n结束")
+}
