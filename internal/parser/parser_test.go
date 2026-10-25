@@ -59,10 +59,23 @@ func TestVarDeclTypeAndConst(t *testing.T) {
 	}
 }
 
-func TestVarDeclMustHaveValue(t *testing.T) {
-	expectError(t, `变量 名字`)
-	expectError(t, `定义 整数 年龄`)
+func TestVarDeclInitialValue(t *testing.T) {
 	expectError(t, `常量 圆周率`)
+
+	prog := mustParse(t, `变量 名字`)
+	if len(prog.Statements) != 1 {
+		t.Fatalf("应为 1 条语句")
+	}
+	vd, ok := prog.Statements[0].(*ast.VarDecl)
+	if !ok || vd.Value != nil {
+		t.Fatalf("变量 名字 应为无初值声明")
+	}
+
+	prog = mustParse(t, `定义 整数 年龄`)
+	vd = prog.Statements[0].(*ast.VarDecl)
+	if vd.Value != nil || vd.DeclType != ast.TypeInt {
+		t.Fatalf("定义 整数 年龄 应为整数类型无初值声明")
+	}
 }
 
 func TestTernaryMissingColon(t *testing.T) {

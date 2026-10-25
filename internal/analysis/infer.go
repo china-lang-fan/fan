@@ -197,7 +197,7 @@ func (idx *Index) localTypesForFunction(fn *ast.FunctionLiteral) map[string]stri
 		switch n := node.(type) {
 		case *ast.VarDecl:
 			t := string(n.DeclType)
-			if t == "" || t == "任意" {
+			if (t == "" || t == "任意") && n.Value != nil {
 				t = idx.inferType(n.Value, locals)
 			}
 			locals[n.Name] = t

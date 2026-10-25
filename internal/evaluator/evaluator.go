@@ -233,6 +233,13 @@ func evalBlock(block *ast.BlockStmt, env *Environment) (object.Object, error) {
 }
 
 func evalVarDecl(decl *ast.VarDecl, env *Environment) (object.Object, error) {
+	// 无初值声明：统一初始化为 空；后续赋值仍受声明类型约束。
+	if decl.Value == nil {
+		if err := env.declareZero(decl.Name, decl.DeclType); err != nil {
+			return nil, &EvalError{Pos: decl.Position, Reason: err.Error()}
+		}
+		return object.Null, nil
+	}
 	val, err := Eval(decl.Value, env)
 	if err != nil {
 		return nil, err
@@ -284,6 +291,14 @@ func requireTuple(pos ast.Position, val object.Object, count int) ([]object.Obje
 }
 
 func evalMultiDecl(decl *ast.MultiDecl, env *Environment) (object.Object, error) {
+	if decl.Value == nil {
+		for _, name := range decl.Names {
+			if err := env.declareZero(name, ast.TypeAny); err != nil {
+				return nil, &EvalError{Pos: decl.Position, Reason: err.Error()}
+			}
+		}
+		return object.Null, nil
+	}
 	val, err := Eval(decl.Value, env)
 	if err != nil {
 		return nil, err

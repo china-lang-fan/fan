@@ -306,7 +306,9 @@ func childrenOf(node ast.Node) []ast.Node {
 			addStmt(s)
 		}
 	case *ast.VarDecl:
-		addExpr(n.Value)
+		if n.Value != nil {
+			addExpr(n.Value)
+		}
 	case *ast.MultiDecl:
 		addExpr(n.Value)
 	case *ast.AssignStmt:

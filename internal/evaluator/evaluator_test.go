@@ -241,3 +241,33 @@ func TestShortCircuit(t *testing.T) {
 	mustBool(t, "假 且 (1 除 0 大于 0)", false)
 	mustBool(t, "真 或 (1 除 0 大于 0)", true)
 }
+
+func TestVarDeclNoInit(t *testing.T) {
+	res, err := runSource(t, "变量 a\na")
+	if err != nil {
+		t.Fatalf("无初值变量错误：%v", err)
+	}
+	if res.Inspect() != "空" {
+		t.Errorf("无初值无类型应为 空，实际 %s", res.Inspect())
+	}
+
+	res, err = runSource(t, "变量 整数 b\nb")
+	if err != nil {
+		t.Fatalf("无初值整数变量读取错误：%v", err)
+	}
+	if res.Inspect() != "空" {
+		t.Errorf("无初值类型变量也应为 空，实际 %s", res.Inspect())
+	}
+
+	res, err = runSource(t, "变量 整数 c\nc = 7\nc")
+	if err != nil {
+		t.Fatalf("无初值变量赋值错误：%v", err)
+	}
+	if res.Inspect() != "7" {
+		t.Errorf("期望 7，实际 %s", res.Inspect())
+	}
+
+	if _, err := runSource(t, "变量 整数 d\nd = \"x\""); err == nil {
+		t.Fatal("无初值类型变量后续赋值仍应受类型约束")
+	}
+}

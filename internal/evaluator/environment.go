@@ -204,6 +204,15 @@ func (e *Environment) declare(name string, val object.Object, isConst bool, dt a
 	return nil
 }
 
+// declareZero 声明无初值变量：初始值为 空，跳过初始类型校验；后续赋值仍受 dt 约束。
+func (e *Environment) declareZero(name string, dt ast.DeclType) error {
+	if _, ok := e.store[name]; ok {
+		return fmt.Errorf("变量 %s 已声明", name)
+	}
+	e.store[name] = &binding{value: object.Null, isConst: false, declType: dt}
+	return nil
+}
+
 func (e *Environment) assign(name string, val object.Object) error {
 	b, ok := e.find(name)
 	if !ok {

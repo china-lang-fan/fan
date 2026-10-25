@@ -509,6 +509,19 @@ func (p *Parser) parseVarDecl() ast.Statement {
 			p.next()
 		}
 		if p.cur.Type != token.ASSIGN {
+			if p.cur.Type == token.NEWLINE || p.cur.Type == token.EOF {
+				if isConst {
+					p.addError(p.cur, "常量声明必须赋初值（使用 为 或 =）")
+					return nil
+				}
+				return &ast.MultiDecl{
+					Position:   pos,
+					IsConst:    false,
+					IsExplicit: sawKeyword,
+					Names:      names,
+					Value:      nil,
+				}
+			}
 			p.addError(p.cur, "多变量声明必须使用 为 或 =")
 			return nil
 		}
@@ -527,6 +540,25 @@ func (p *Parser) parseVarDecl() ast.Statement {
 	}
 
 	if p.cur.Type != token.ASSIGN {
+		// 变量声明可省略初值：无初值时按声明类型取零值，无类型则为 空；常量必须赋初值。
+		if p.cur.Type == token.NEWLINE || p.cur.Type == token.EOF {
+			if isConst {
+				p.addError(p.cur, "常量声明必须赋初值（使用 为 或 =）")
+				return nil
+			}
+			if !sawKeyword {
+				p.addError(p.cur, "声明必须赋初值（使用 为 或 =）")
+				return nil
+			}
+			return &ast.VarDecl{
+				Position:   pos,
+				IsConst:    false,
+				IsExplicit: sawKeyword,
+				DeclType:   declType,
+				Name:       name,
+				Value:      nil,
+			}
+		}
 		p.addError(p.cur, "声明必须赋初值（使用 为 或 =）")
 		return nil
 	}
