@@ -207,6 +207,14 @@ func (idx *Index) localTypesForFunction(fn *ast.FunctionLiteral) map[string]stri
 				locals[n.Names[1]] = "布尔"
 				break
 			}
+			if tuple, ok := n.Value.(*ast.TupleExpr); ok && len(tuple.Elements) == len(n.Names) {
+				for i, name := range n.Names {
+					if t := idx.inferType(tuple.Elements[i], locals); t != "" {
+						locals[name] = t
+					}
+				}
+				break
+			}
 			if t := idx.inferType(n.Value, locals); t != "" {
 				for _, name := range n.Names {
 					locals[name] = t

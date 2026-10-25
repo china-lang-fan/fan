@@ -253,6 +253,25 @@ func TestMultiAssignCountMismatch(t *testing.T) {
 	mustError(t, src, "多目标赋值")
 }
 
+func TestMultiDeclCommaRHS(t *testing.T) {
+	src := "变量 a, b = 1, 2\nb"
+	mustInt(t, src, 2)
+
+	src = "变量 c、d = 3、\"x\"\nd"
+	res, err := runSource(t, src)
+	if err != nil {
+		t.Fatalf("运行错误：%v", err)
+	}
+	if res.Inspect() != "x" {
+		t.Fatalf("多变量声明（顿号）应得 x，实际 %s", res.Inspect())
+	}
+
+	src = "变量 a = 0\n变量 b = 0\na, b = 4, 5\nb"
+	mustInt(t, src, 5)
+
+	mustError(t, "变量 a, b = 1", "多目标赋值")
+}
+
 func TestMultiReturnNoType(t *testing.T) {
 	src := "函数 f()\n    返回 1、\"x\"、真\n结束\n变量 a、b、c = f()\nb"
 	res, err := runSource(t, src)

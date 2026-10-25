@@ -27,6 +27,21 @@ func evalArrayLiteral(node *ast.ArrayLiteral, env *Environment) (object.Object, 
 	return &object.Array{Elements: elems}, nil
 }
 
+func evalTupleExpr(node *ast.TupleExpr, env *Environment) (object.Object, error) {
+	elems := make([]object.Object, 0, len(node.Elements))
+	for _, el := range node.Elements {
+		val, err := Eval(el, env)
+		if err != nil {
+			return nil, err
+		}
+		if val == nil {
+			val = object.Null
+		}
+		elems = append(elems, val)
+	}
+	return &object.Tuple{Values: elems}, nil
+}
+
 func evalDictLiteral(node *ast.DictLiteral, env *Environment) (object.Object, error) {
 	dict := object.NewDict()
 	for _, pair := range node.Pairs {

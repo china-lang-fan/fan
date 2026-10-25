@@ -144,6 +144,22 @@ func (m *MultiAssign) String() string {
 	return fmt.Sprintf("%s = %s", strings.Join(m.Names, "、"), m.Value.String())
 }
 
+// TupleExpr 是多目标声明/赋值右侧以逗号分隔的表达式序列，如 a, b = 1, 2。
+type TupleExpr struct {
+	Position Position
+	Elements []Expression
+}
+
+func (t *TupleExpr) Pos() Position   { return t.Position }
+func (t *TupleExpr) expressionNode() {}
+func (t *TupleExpr) String() string {
+	parts := make([]string, len(t.Elements))
+	for i, e := range t.Elements {
+		parts[i] = e.String()
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
 type ExpressionStmt struct {
 	Position   Position
 	Expression Expression

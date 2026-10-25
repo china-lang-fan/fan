@@ -57,6 +57,8 @@ func Eval(node ast.Node, env *Environment) (object.Object, error) {
 		return evalBlock(n, NewEnclosedEnvironment(env))
 	case *ast.ArrayLiteral:
 		return evalArrayLiteral(n, env)
+	case *ast.TupleExpr:
+		return evalTupleExpr(n, env)
 	case *ast.DictLiteral:
 		return evalDictLiteral(n, env)
 	case *ast.IndexExpr:

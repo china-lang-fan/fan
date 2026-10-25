@@ -513,8 +513,8 @@ func (p *Parser) parseVarDecl() ast.Statement {
 			return nil
 		}
 		p.next()
-		value := p.parseExpression(LOWEST)
-		if value == nil {
+		value, ok := p.parseRHSList(pos)
+		if !ok {
 			return nil
 		}
 		return &ast.MultiDecl{
@@ -588,8 +588,8 @@ func (p *Parser) parseBareDecl() ast.Statement {
 			return nil
 		}
 		p.next()
-		value := p.parseExpression(LOWEST)
-		if value == nil {
+		value, ok := p.parseRHSList(pos)
+		if !ok {
 			return nil
 		}
 		return &ast.MultiAssign{Position: pos, Names: names, Value: value}
@@ -1986,6 +1986,31 @@ func (p *Parser) parseReturnTypes() ([]ast.DeclType, bool) {
 	}
 	types := []ast.DeclType{p.parseTypeUnion()}
 	return types, true
+}
+
+// parseRHSList 解析多目标声明/赋值右侧：逗号分隔时包装为 TupleExpr，单个表达式直接返回。
+func (p *Parser) parseRHSList(pos ast.Position) (ast.Expression, bool) {
+	first := p.parseExpression(LOWEST)
+	if first == nil {
+		return nil, false
+	}
+	if p.cur.Type != token.COMMA {
+		return first, true
+	}
+	elems := []ast.Expression{first}
+	for p.cur.Type == token.COMMA {
+		p.next()
+		if p.cur.Type == token.NEWLINE || p.cur.Type == token.EOF {
+			p.addError(p.cur, "多目标赋值右侧逗号后缺少表达式")
+			return nil, false
+		}
+		expr := p.parseExpression(LOWEST)
+		if expr == nil {
+			return nil, false
+		}
+		elems = append(elems, expr)
+	}
+	return &ast.TupleExpr{Position: pos, Elements: elems}, true
 }
 
 func (p *Parser) parseExpressionList() ([]ast.Expression, bool) {
